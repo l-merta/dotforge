@@ -1,3 +1,11 @@
+use std::env;
+
 fn main() {
-    println!("Welcome to Dotforge!");
+  let args: Vec<String> = env::args().collect();
+
+  println!("Arguments:");
+
+  for argument in args {
+    println!("  {argument}");
+  }
 }

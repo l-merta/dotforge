@@ -1,0 +1,15 @@
+name: My Hyprland
+
+device:
+  type: desktop
+
+desktop:
+  compositor: hyprland
+  shell: noctalia
+
+applications:
+  - firefox
+  - kitty
+
+theme:
+  active: nord
