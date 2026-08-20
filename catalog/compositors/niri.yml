@@ -1,8 +1,8 @@
-id: hyprland
+id: niri
 
-name: Hyprland
+name: Niri
 
-description: Dynamic tiling Wayland compositor
+description: Scrollable-tiling Wayland compositor
 
 category: compositor
 
@@ -15,21 +15,16 @@ protocols:
 installation:
   arch:
     packages:
-      - hyprland
-
-dependencies:
-  - xdg-desktop-portal
-  - xdg-desktop-portal-hyprland
+      - niri
 
 capabilities:
   - compositor
   - window-management
   - keybindings
   - workspaces
-  - animations
 
 configuration:
-  directory: ~/.config/hypr
+  directory: ~/.config/niri
 
 integration:
   themes: true

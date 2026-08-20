@@ -1,0 +1,30 @@
+id: noctalia
+
+name: Noctalia
+
+description: Wayland desktop shell providing panels, notifications, wallpaper management, and other desktop components
+
+category: shell
+
+platforms:
+  - linux
+
+protocols:
+  - wayland
+
+installation:
+  arch:
+    packages:
+      - noctalia-shell
+
+capabilities:
+  - notifications
+  - launcher
+  - panel
+  - wallpaper
+  - theme
+
+integration:
+  themes: true
+  wallpapers: true
+  keybindings: true

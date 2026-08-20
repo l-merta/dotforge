@@ -1,44 +1,34 @@
 use std::path::Path;
 
+use catalog::model::Category;
+
 mod catalog;
 
 fn main() {
-  let path = Path::new("catalog/compositors/hyprland.yml");
+  let path = Path::new("catalog");
 
-  match catalog::loader::load_entry(path) {
-    Ok(entry) => {
-      println!("Loaded: {}", entry.name);
-      println!("ID: {}", entry.id);
-      println!("Description: {}", entry.description);
-      println!("Category: {:?}", entry.category);
-      println!("Protocols: {:?}", entry.protocols);
-      println!("Platforms: {:?}", entry.platforms);
-      println!("Dependencies: {:?}", entry.dependencies);
+  match catalog::catalog::Catalog::load(path) {
+    Ok(catalog) => {
+      println!("Catalog loaded!");
+      println!("Total entries: {}", catalog.all().len());
 
-      println!("Packages:");
+      println!();
+      println!("Compositors:");
 
-      for (manager, installation) in &entry.installation.package_managers {
-        println!("  {manager}:");
-
-        for package in &installation.packages {
-          println!("    - {package}");
-        }
+      for entry in catalog.by_category(&Category::Compositor) {
+        println!("  {} - {}", entry.id, entry.name);
       }
 
-      if let Some(configuration) = &entry.configuration {
-        println!("Configuration: {}", configuration.directory);
+      println!();
+      println!("Shells:");
+
+      for entry in catalog.by_category(&Category::Shell) {
+        println!("  {} - {}", entry.id, entry.name);
       }
-
-      println!("Capabilities: {:?}", entry.capabilities);
-
-      println!("Integration:");
-      println!("  Themes: {}", entry.integration.themes);
-      println!("  Wallpapers: {}", entry.integration.wallpapers);
-      println!("  Keybindings: {}", entry.integration.keybindings);
     }
 
     Err(error) => {
-      eprintln!("Failed to load catalog entry: {error}");
+      eprintln!("Failed to load catalog: {error}");
     }
   }
 }

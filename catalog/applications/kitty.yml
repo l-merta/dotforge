@@ -1,0 +1,25 @@
+id: kitty
+
+name: Kitty
+
+description: Fast GPU-accelerated terminal emulator
+
+category: application
+
+platforms:
+  - linux
+
+protocols:
+  - wayland
+  - x11
+
+installation:
+  arch:
+    packages:
+      - kitty
+
+capabilities:
+  - theme
+
+integration:
+  themes: true

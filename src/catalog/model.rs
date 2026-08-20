@@ -29,7 +29,7 @@ pub struct CatalogEntry {
   pub integration: Integration,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Category {
   Desktop,
