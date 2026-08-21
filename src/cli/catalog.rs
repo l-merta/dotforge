@@ -1,0 +1,57 @@
+use std::path::Path;
+
+use clap::Subcommand;
+
+use crate::catalog::catalog::Catalog;
+use crate::catalog::model::Category;
+
+#[derive(Subcommand, Debug)]
+pub enum CatalogCommands {
+  /// List available catalog entries
+  List,
+
+  /// Show details about a catalog entry
+  Show {
+    /// Catalog entry ID
+    id: String,
+  },
+}
+
+pub fn handle(command: CatalogCommands, catalog_path: &Path) {
+  match command {
+    CatalogCommands::List => list(catalog_path),
+
+    CatalogCommands::Show { id } => {
+      println!("Showing catalog entry: {id}");
+    }
+  }
+}
+
+fn list(catalog_path: &Path) {
+  let catalog = match Catalog::load(catalog_path) {
+    Ok(catalog) => catalog,
+
+    Err(error) => {
+      eprintln!("Failed to load catalog: {error}");
+      return;
+    }
+  };
+
+  println!("Catalog loaded!");
+  println!("Total entries: {}", catalog.all().len());
+
+  print_category(&catalog, Category::Desktop, "Desktop environments");
+  print_category(&catalog, Category::Compositor, "Compositors");
+  print_category(&catalog, Category::Shell, "Shells");
+  print_category(&catalog, Category::Component, "Components");
+  print_category(&catalog, Category::Application, "Applications");
+}
+
+fn print_category(catalog: &Catalog, category: Category, title: &str) {
+  println!();
+  println!("{title}:");
+
+  for entry in catalog.by_category(&category) {
+    println!("  {} - {}", entry.id, entry.name);
+  }
+}
