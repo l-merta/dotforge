@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use clap::ValueEnum;
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
@@ -24,12 +25,10 @@ pub struct CatalogEntry {
 
   #[serde(default)]
   pub configuration: Option<Configuration>,
-
-  #[serde(default)]
-  pub integration: Integration,
 }
 
-#[derive(Debug, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq, ValueEnum)]
+#[clap(rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum Category {
   Desktop,
@@ -82,26 +81,4 @@ pub enum Capability {
 #[derive(Debug, Deserialize)]
 pub struct Configuration {
   pub directory: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct Integration {
-  #[serde(default)]
-  pub themes: bool,
-
-  #[serde(default)]
-  pub wallpapers: bool,
-
-  #[serde(default)]
-  pub keybindings: bool,
-}
-
-impl Default for Integration {
-  fn default() -> Self {
-    Self {
-      themes: false,
-      wallpapers: false,
-      keybindings: false,
-    }
-  }
 }
