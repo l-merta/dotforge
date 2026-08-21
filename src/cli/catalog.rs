@@ -27,7 +27,7 @@ pub fn handle(command: CatalogCommands, catalog_path: &Path) {
     }
 
     CatalogCommands::Show { id } => {
-      println!("Showing catalog entry: {id}");
+      show(catalog_path, &id);
     }
   }
 }
@@ -63,6 +63,34 @@ fn list(catalog_path: &Path, category: Option<Category>) {
       print_category(&catalog, Category::Application, "Applications");
     }
   }
+}
+
+fn show(catalog_path: &Path, id: &str) {
+  let catalog = match Catalog::load(catalog_path) {
+    Ok(catalog) => catalog,
+
+    Err(error) => {
+      eprintln!("Failed to load catalog: {error}");
+      return;
+    }
+  };
+
+  let Some(entry) = catalog.get(id) else {
+    eprintln!("Catalog entry '{id}' not found.");
+    return;
+  };
+
+  println!("{}", entry.name);
+  println!("────────────────────────────────");
+  println!();
+  println!("ID:");
+  println!("  {}", entry.id);
+  println!();
+  println!("Category:");
+  println!("  {:?}", entry.category);
+  println!();
+  println!("Description:");
+  println!("  {}", entry.description);
 }
 
 fn print_category(catalog: &Catalog, category: Category, title: &str) {
