@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use clap::ValueEnum;
 use std::collections::HashMap;
+use std::fmt;
 
 #[derive(Debug, Deserialize)]
 pub struct CatalogEntry {
@@ -38,10 +39,34 @@ pub enum Category {
   Application,
 }
 
+impl fmt::Display for Category {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let value = match self {
+      Category::Desktop => "Desktop environment",
+      Category::Compositor => "Compositor",
+      Category::Shell => "Shell",
+      Category::Component => "Component",
+      Category::Application => "Application",
+    };
+
+    write!(f, "{value}")
+  }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Platform {
   Linux,
+}
+
+impl fmt::Display for Platform {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let value = match self {
+      Platform::Linux => "Linux",
+    };
+
+    write!(f, "{value}")
+  }
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +74,17 @@ pub enum Platform {
 pub enum Protocol {
   Wayland,
   X11,
+}
+
+impl fmt::Display for Protocol {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let value = match self {
+      Protocol::Wayland => "Wayland",
+      Protocol::X11 => "X11",
+    };
+
+    write!(f, "{value}")
+  }
 }
 
 #[derive(Debug, Deserialize)]
@@ -76,6 +112,25 @@ pub enum Capability {
   Panel,
   Wallpaper,
   Theme,
+}
+
+impl fmt::Display for Capability {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let value = match self {
+      Capability::Compositor => "Compositor",
+      Capability::WindowManagement => "Window management",
+      Capability::Keybindings => "Keybindings",
+      Capability::Workspaces => "Workspaces",
+      Capability::Animations => "Animations",
+      Capability::Notifications => "Notifications",
+      Capability::Launcher => "Launcher",
+      Capability::Panel => "Panel",
+      Capability::Wallpaper => "Wallpaper",
+      Capability::Theme => "Theme",
+    };
+
+    write!(f, "{value}")
+  }
 }
 
 #[derive(Debug, Deserialize)]

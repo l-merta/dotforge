@@ -83,14 +83,57 @@ fn show(catalog_path: &Path, id: &str) {
   println!("{}", entry.name);
   println!("────────────────────────────────");
   println!();
+
   println!("ID:");
   println!("  {}", entry.id);
   println!();
+
   println!("Category:");
-  println!("  {:?}", entry.category);
+  println!("  {}", entry.category);
   println!();
+
   println!("Description:");
   println!("  {}", entry.description);
+  println!();
+
+  println!("Platforms:");
+  for platform in &entry.platforms {
+    println!("  {}", platform);
+  }
+  println!();
+
+  println!("Protocols:");
+  for protocol in &entry.protocols {
+    println!("  {}", protocol);
+  }
+  println!();
+
+  println!("Capabilities:");
+  for capability in &entry.capabilities {
+    println!("  {}", capability);
+  }
+  println!();
+
+  println!("Dependencies:");
+  for dependency in &entry.dependencies {
+    println!("  {dependency}");
+  }
+  println!();
+
+  println!("Installation:");
+  for (package_manager, installation) in &entry.installation.package_managers {
+    println!("  {package_manager}:");
+
+    for package in &installation.packages {
+      println!("    {package}");
+    }
+  }
+  println!();
+
+  if let Some(configuration) = &entry.configuration {
+    println!("Configuration:");
+    println!("  {}", configuration.directory);
+  }
 }
 
 fn print_category(catalog: &Catalog, category: Category, title: &str) {
