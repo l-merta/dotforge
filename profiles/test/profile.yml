@@ -1,15 +1,56 @@
-name: My Hyprland
+name: Test profile
 
 device:
   type: desktop
+  os-family: arch
+  os: gentoo
+  os-version: 1.0
 
-desktop:
-  compositor: hyprland
-  shell: noctalia
+system:
+  audio:
+    - pulseaudio
+    - pipewire
+  video:
+    - mesa
+    - vulkan
+  hardware:
+    - nvidia-drivers
 
 applications:
-  - firefox
-  - kitty
+  gaming:
+    - steam
+    - lutris
+    - heroic
+  productivity:
+    - libreoffice
+    - gimp
+  utilities:
+    - neofetch
+    - htop
+  hardware:
+    - mesa
+    - vulkan
+  development:
+    - vscode
+    - git
+  system:
+    - zshell
 
-theme:
-  active: nord
+rice:
+  desktop: kde-plasma
+  compositor: hyprland
+  shell: noctalia
+  components:
+    taskbar:
+      - waybar
+    status:
+      - polybar
+    launcher:
+      - rofi
+    notifications:
+      - dunst
+    terminal:
+      - kitty
+    other:
+      - flameshot
+      - alacritty
