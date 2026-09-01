@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use clap::Subcommand;
 
 #[derive(Subcommand, Debug)]
@@ -18,10 +20,11 @@ pub enum ProfileCommands {
   },
 }
 
-pub fn handle(command: ProfileCommands) {
+pub fn handle(command: ProfileCommands, profiles_path: &Path) {
   match command {
     ProfileCommands::List => {
       println!("Profile list");
+      //list(profiles_path);
     }
 
     ProfileCommands::Create { name } => {
