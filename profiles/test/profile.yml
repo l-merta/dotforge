@@ -1,56 +1,61 @@
 name: Test profile
+description: This is a test profile.
+version: 0.1
 
 device:
   type: desktop
-  os-family: arch
-  os: gentoo
-  os-version: 1.0
+  os:
+    family: arch
+    distribution: arch
 
 system:
   audio:
-    - pulseaudio
-    - pipewire
-  video:
-    - mesa
-    - vulkan
+    backend: pipewire
+
+  graphics:
+    drivers:
+      - mesa
+    api:
+      - vulkan
+
   hardware:
-    - nvidia-drivers
+    drivers:
+      - nvidia
 
 applications:
+  terminal: kitty
+
   gaming:
     - steam
     - lutris
     - heroic
+
+  social:
+    - discord
+    - telegram
+
   productivity:
     - libreoffice
     - gimp
+
   utilities:
     - neofetch
     - htop
-  hardware:
-    - mesa
-    - vulkan
+
   development:
     - vscode
     - git
+
   system:
-    - zshell
+    - zsh
 
 rice:
   desktop: kde-plasma
   compositor: hyprland
   shell: noctalia
+
   components:
-    taskbar:
-      - waybar
-    status:
-      - polybar
-    launcher:
-      - rofi
-    notifications:
-      - dunst
-    terminal:
-      - kitty
-    other:
-      - flameshot
-      - alacritty
+    taskbar: waybar
+    status: waybar
+    launcher: rofi
+    notifications: dunst
