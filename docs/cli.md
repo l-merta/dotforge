@@ -35,8 +35,8 @@ The command could not run:
 }
 ```
 
-`error.kind` is one of `not_found`, `io`, `parse`, `invalid`,
-`no_config_dir`, `not_implemented`. Parse errors also include `file`,
+`error.kind` is one of `not_found`, `already_exists`, `io`, `parse`,
+`invalid`, `no_config_dir`, `not_implemented`. Parse errors also include `file`,
 `field`, `line`, `column` and `reason`.
 
 In text mode, results go to stdout and errors to stderr.
@@ -51,6 +51,7 @@ In text mode, results go to stdout and errors to stderr.
 | 3 | The profile or catalog entry was not found. |
 | 4 | A profile or catalog file is invalid, or validation found errors. |
 | 5 | The command is not implemented yet. |
+| 6 | Something with that name already exists (for example `profile create` for an existing profile). |
 
 These numbers will not change. New codes may be added later.
 

@@ -10,12 +10,55 @@ A profile describes the machine you want. It lives in its own folder:
     └── assets/       ← wallpapers, icons, fonts, ... (used from Milestone 6)
 ```
 
-Check a profile with:
+## Working with profiles
 
 ```sh
-dotforge profile validate desktop          # by name
-dotforge profile validate ./some/folder    # or by path
+dotforge profile create desktop            # new profile from a starter template
+dotforge profile create work-laptop --device laptop --description "Office"
+dotforge profile list                      # all your profiles
+dotforge profile show desktop              # what a profile contains
+dotforge profile validate desktop          # check it for mistakes
+dotforge profile show ./some/folder        # any command also takes a path
 ```
+
+`profile create` makes the folder, a `profile.yml` with only the required
+fields filled in (the rest are commented-out examples), and the
+`config/` and `assets/` folders (`wallpapers`, `icons`, `cursors`,
+`fonts`). It never overwrites an existing profile.
+
+### Profile names
+
+The **profile name** is the name of its folder, and it is what you type in
+commands. The rules are the same as for catalog IDs: lowercase letters,
+digits and single dashes, at most 64 characters (`desktop`,
+`work-laptop`, `vm2`). `profile create` refuses other names and suggests a
+fixed one (`"My Laptop"` → `my-laptop`).
+
+The `name:` field *inside* `profile.yml` is a separate **display name**
+and can be any text.
+
+### Name or path?
+
+- A plain name (`desktop`) is looked up in
+  `~/.config/dotforge/profiles/desktop/profile.yml`.
+- Anything with a `/` in it, or ending in `.yml`, is used as a path. A
+  folder means `<folder>/profile.yml`.
+
+### What `profile list` reports
+
+Listing only reads each folder name and the `name:`/`description:` lines,
+so one broken profile never stops the others from being listed. Each
+profile gets a status:
+
+| Status | Meaning |
+|---|---|
+| `ok` | `profile.yml` was found and its first fields could be read. Run `validate` for a full check. |
+| `missing_file` | The folder has no `profile.yml`. |
+| `unreadable` | `profile.yml` is not valid YAML. |
+
+It also warns about folder names that break the naming rules, folders
+that only differ in upper/lower case, and profiles that share the same
+display name. Hidden folders (starting with `.`) are skipped.
 
 ## Full example
 
