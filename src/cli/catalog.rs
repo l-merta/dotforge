@@ -1,146 +1,268 @@
-use std::path::Path;
+//! `dotforge catalog ...` commands.
+//!
+//! Each command builds a small result struct. The struct is turned into
+//! JSON automatically (`Serialize`) and into text by its `Render` impl.
 
 use clap::Subcommand;
+use serde::Serialize;
 
 use crate::catalog::catalog::Catalog;
-use crate::catalog::model::Category;
+use crate::catalog::model::{CatalogEntry, Category, Source};
+use crate::catalog::validate;
+use crate::error::AppError;
+use crate::exit_code::ExitCode;
+use crate::output::{Render, Report};
+use crate::validation::{Issue, Severity, count, render_issues};
 
 #[derive(Subcommand, Debug)]
 pub enum CatalogCommands {
   /// List available catalog entries
   List {
-    /// Optional category filter
+    /// Only show entries of this category
     category: Option<Category>,
   },
 
   /// Show details about a catalog entry
   Show {
-    /// Catalog entry ID
+    /// Catalog entry ID, e.g. hyprland
     id: String,
   },
+
+  /// Check every catalog entry for mistakes
+  Validate,
 }
 
-pub fn handle(command: CatalogCommands, catalog_path: &Path) {
-  match command {
-    CatalogCommands::List { category } => {
-      list(catalog_path, category);
-    }
+pub fn handle(command: CatalogCommands) -> Result<Report, AppError> {
+  let catalog = Catalog::load()?;
 
-    CatalogCommands::Show { id } => {
-      show(catalog_path, &id);
+  match command {
+    CatalogCommands::List { category } => Ok(Report::new(&list(&catalog, category))),
+    CatalogCommands::Show { id } => show(&catalog, &id).map(|entry| Report::new(&entry)),
+    CatalogCommands::Validate => {
+      let result = validate_catalog(&catalog);
+      let exit_code = if result.errors > 0 {
+        ExitCode::Invalid
+      } else {
+        ExitCode::Success
+      };
+      Ok(Report::new(&result).with_exit_code(exit_code))
     }
   }
 }
 
-fn list(catalog_path: &Path, category: Option<Category>) {
-  let catalog = match Catalog::load(catalog_path) {
-    Ok(catalog) => catalog,
+// ---------- list ----------
 
-    Err(error) => {
-      eprintln!("Failed to load catalog: {error}");
-      return;
-    }
+#[derive(Serialize)]
+pub struct CatalogList {
+  /// The category filter, if one was given.
+  pub category: Option<Category>,
+  pub total: usize,
+  pub entries: Vec<ListItem>,
+}
+
+#[derive(Serialize)]
+pub struct ListItem {
+  pub id: String,
+  pub name: String,
+  pub category: Category,
+  pub source: Source,
+}
+
+fn list(catalog: &Catalog, category: Option<Category>) -> CatalogList {
+  let selected: Vec<&CatalogEntry> = match category {
+    Some(category) => catalog.by_category(category),
+    None => catalog.all().iter().collect(),
   };
 
-  match category {
-    Some(category) => {
-      println!("Catalog entries in {:?}:", category);
-      println!();
+  let entries: Vec<ListItem> = selected
+    .into_iter()
+    .map(|entry| ListItem {
+      id: entry.id.clone(),
+      name: entry.name.clone(),
+      category: entry.category,
+      source: entry.source.clone(),
+    })
+    .collect();
 
-      for entry in catalog.by_category(&category) {
-        println!("  {} - {}", entry.id, entry.name);
+  CatalogList {
+    category,
+    total: entries.len(),
+    entries,
+  }
+}
+
+impl Render for CatalogList {
+  fn render_text(&self) -> String {
+    let mut text = String::new();
+    let categories: Vec<Category> = match self.category {
+      Some(category) => vec![category],
+      None => Category::ALL.to_vec(),
+    };
+
+    text.push_str(&format!("Catalog entries: {}\n", self.total));
+
+    for category in categories {
+      text.push_str(&format!("\n{}:\n", category.title()));
+
+      let items: Vec<&ListItem> = self
+        .entries
+        .iter()
+        .filter(|item| item.category == category)
+        .collect();
+
+      if items.is_empty() {
+        text.push_str("  (none yet)\n");
+      }
+
+      for item in items {
+        let marker = match item.source.kind {
+          crate::catalog::model::SourceKind::User => "  [user]",
+          crate::catalog::model::SourceKind::Builtin => "",
+        };
+        text.push_str(&format!("  {} - {}{marker}\n", item.id, item.name));
       }
     }
 
+    text
+  }
+}
+
+// ---------- show ----------
+
+fn show(catalog: &Catalog, id: &str) -> Result<CatalogEntry, AppError> {
+  match catalog.get(id) {
+    Some(entry) => Ok(entry.clone()),
     None => {
-      println!("Catalog loaded!");
-      println!("Total entries: {}", catalog.all().len());
+      let similar = catalog.similar_ids(id);
+      let hint = if similar.is_empty() {
+        "run 'dotforge catalog list' to see every entry".to_string()
+      } else {
+        format!("did you mean '{}'?", similar.join("', '"))
+      };
 
-      print_category(&catalog, Category::Desktop, "Desktop environments");
-      print_category(&catalog, Category::Compositor, "Compositors");
-      print_category(&catalog, Category::Shell, "Shells");
-      print_category(&catalog, Category::Component, "Components");
-      print_category(&catalog, Category::Application, "Applications");
+      Err(AppError::NotFound {
+        what: "catalog entry",
+        name: id.to_string(),
+        hint: Some(hint),
+      })
     }
   }
 }
 
-fn show(catalog_path: &Path, id: &str) {
-  let catalog = match Catalog::load(catalog_path) {
-    Ok(catalog) => catalog,
+impl Render for CatalogEntry {
+  fn render_text(&self) -> String {
+    let mut text = String::new();
 
-    Err(error) => {
-      eprintln!("Failed to load catalog: {error}");
-      return;
+    text.push_str(&format!("{}\n", self.name));
+    text.push_str("────────────────────────────────\n\n");
+
+    section(&mut text, "ID", [self.id.clone()]);
+    section(&mut text, "Category", [self.category.to_string()]);
+    section(&mut text, "Description", [self.description.clone()]);
+    section(&mut text, "Source", [self.source.to_string()]);
+    section(
+      &mut text,
+      "Platforms",
+      self.platforms.iter().map(ToString::to_string),
+    );
+    section(
+      &mut text,
+      "Protocols",
+      self.protocols.iter().map(ToString::to_string),
+    );
+    section(
+      &mut text,
+      "Capabilities",
+      self.capabilities.iter().map(ToString::to_string),
+    );
+    section(&mut text, "Dependencies", self.dependencies.iter().cloned());
+
+    text.push_str("Installation:\n");
+    if self.installation.package_managers.is_empty() {
+      text.push_str("  (none)\n");
     }
-  };
-
-  let Some(entry) = catalog.get(id) else {
-    eprintln!("Catalog entry '{id}' not found.");
-    return;
-  };
-
-  println!("{}", entry.name);
-  println!("────────────────────────────────");
-  println!();
-
-  println!("ID:");
-  println!("  {}", entry.id);
-  println!();
-
-  println!("Category:");
-  println!("  {}", entry.category);
-  println!();
-
-  println!("Description:");
-  println!("  {}", entry.description);
-  println!();
-
-  println!("Platforms:");
-  for platform in &entry.platforms {
-    println!("  {}", platform);
-  }
-  println!();
-
-  println!("Protocols:");
-  for protocol in &entry.protocols {
-    println!("  {}", protocol);
-  }
-  println!();
-
-  println!("Capabilities:");
-  for capability in &entry.capabilities {
-    println!("  {}", capability);
-  }
-  println!();
-
-  println!("Dependencies:");
-  for dependency in &entry.dependencies {
-    println!("  {dependency}");
-  }
-  println!();
-
-  println!("Installation:");
-  for (package_manager, installation) in &entry.installation.package_managers {
-    println!("  {package_manager}:");
-
-    for package in &installation.packages {
-      println!("    {package}");
+    for (family, installation) in &self.installation.package_managers {
+      text.push_str(&format!("  {family}:\n"));
+      for package in &installation.packages {
+        text.push_str(&format!("    {package}\n"));
+      }
     }
-  }
-  println!();
 
-  if let Some(configuration) = &entry.configuration {
-    println!("Configuration:");
-    println!("  {}", configuration.directory);
+    if let Some(configuration) = &self.configuration {
+      text.push('\n');
+      section(
+        &mut text,
+        "Configuration",
+        [configuration.directory.clone()],
+      );
+    }
+
+    text
   }
 }
 
-fn print_category(catalog: &Catalog, category: Category, title: &str) {
-  println!();
-  println!("{title}:");
+fn section(text: &mut String, title: &str, lines: impl IntoIterator<Item = String>) {
+  text.push_str(&format!("{title}:\n"));
 
-  for entry in catalog.by_category(&category) {
-    println!("  {} - {}", entry.id, entry.name);
+  let mut empty = true;
+  for line in lines {
+    text.push_str(&format!("  {line}\n"));
+    empty = false;
+  }
+
+  if empty {
+    text.push_str("  (none)\n");
+  }
+
+  text.push('\n');
+}
+
+// ---------- validate ----------
+
+#[derive(Serialize)]
+pub struct CatalogValidation {
+  pub valid: bool,
+  pub entries: usize,
+  pub errors: usize,
+  pub warnings: usize,
+  /// Built-in IDs that a user entry replaces.
+  pub overridden: Vec<String>,
+  pub issues: Vec<Issue>,
+}
+
+fn validate_catalog(catalog: &Catalog) -> CatalogValidation {
+  let issues = validate::validate(catalog);
+  let errors = count(&issues, Severity::Error);
+
+  CatalogValidation {
+    valid: errors == 0,
+    entries: catalog.all().len(),
+    errors,
+    warnings: count(&issues, Severity::Warning),
+    overridden: catalog.overridden().to_vec(),
+    issues,
+  }
+}
+
+impl Render for CatalogValidation {
+  fn render_text(&self) -> String {
+    let mut text = format!(
+      "Checked {} catalog entries: {} error(s), {} warning(s)\n",
+      self.entries, self.errors, self.warnings
+    );
+
+    for id in &self.overridden {
+      text.push_str(&format!(
+        "  note: your entry '{id}' replaces the built-in one\n"
+      ));
+    }
+
+    text.push_str(&render_issues(&self.issues));
+
+    if self.valid {
+      text.push_str("The catalog is valid.\n");
+    }
+
+    text
   }
 }
