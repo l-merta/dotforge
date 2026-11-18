@@ -26,6 +26,8 @@ pub enum ExitCode {
   Invalid,
   /// The command exists but is not implemented yet.
   NotImplemented,
+  /// Something with that name already exists (for example a profile).
+  AlreadyExists,
 }
 
 impl ExitCode {
@@ -37,6 +39,7 @@ impl ExitCode {
       ExitCode::NotFound => 3,
       ExitCode::Invalid => 4,
       ExitCode::NotImplemented => 5,
+      ExitCode::AlreadyExists => 6,
     }
   }
 }
@@ -53,5 +56,6 @@ mod tests {
     assert_eq!(ExitCode::NotFound.code(), 3);
     assert_eq!(ExitCode::Invalid.code(), 4);
     assert_eq!(ExitCode::NotImplemented.code(), 5);
+    assert_eq!(ExitCode::AlreadyExists.code(), 6);
   }
 }

@@ -5,8 +5,8 @@ in a YAML **profile** (desktop, compositor, shell, apps, drivers, ...),
 DotForge looks each piece up in its **catalog**, and, eventually, makes
 your machine match the profile.
 
-> **Work in progress.** DotForge is an early prototype. It can read and
-> check profiles and catalog entries, but it does not install or change
+> **Work in progress.** DotForge is an early prototype. It can create, list and
+> check profiles and browse the catalog, but it does not install or change
 > anything yet. Arch Linux is the first supported system.
 
 ## Build and install from source
@@ -24,15 +24,20 @@ This puts the `dotforge` program in `~/.cargo/bin`.
 ## Try it
 
 ```sh
+dotforge profile create desktop       # make your first profile
+dotforge profile list                 # see your profiles
+dotforge profile show desktop         # what a profile contains
+dotforge profile validate desktop     # check it for mistakes
 dotforge catalog list                 # everything DotForge knows about
 dotforge catalog show hyprland        # details of one entry
-dotforge catalog validate             # check the catalog for mistakes
-dotforge profile validate ./profiles/test   # check a profile
-dotforge --json catalog list          # any command, as JSON
+dotforge --json profile list          # any command, as JSON
 ```
+
+Your profiles live in `~/.config/dotforge/profiles/`.
 
 ## Documentation
 
 - [Profile format](docs/profile-format.md)
 - [Catalog format](docs/catalog-format.md)
 - [Command line conventions: `--json`, exit codes, file locations](docs/cli.md)
+- [Hand tests: try each feature yourself](docs/manual-tests.md)

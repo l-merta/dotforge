@@ -187,3 +187,144 @@ fn bad_arguments_exit_with_usage() {
   let output = dotforge(config.path(), &["catalog", "fly"]);
   assert_eq!(output.status.code(), Some(2));
 }
+
+// ---------- Milestone 2: profile management ----------
+
+#[test]
+fn list_with_no_profiles_explains_what_to_do() {
+  let config = TempDir::new().unwrap();
+  let output = dotforge(config.path(), &["profile", "list"]);
+
+  assert_eq!(output.status.code(), Some(0));
+  assert!(String::from_utf8_lossy(&output.stdout).contains("dotforge profile create"));
+}
+
+#[test]
+fn create_then_list_show_and_validate() {
+  let config = TempDir::new().unwrap();
+
+  let output = dotforge(
+    config.path(),
+    &[
+      "profile",
+      "create",
+      "work-laptop",
+      "--device",
+      "laptop",
+      "--description",
+      "Office",
+    ],
+  );
+  assert_eq!(
+    output.status.code(),
+    Some(0),
+    "{}",
+    String::from_utf8_lossy(&output.stderr)
+  );
+
+  let folder = config.path().join("profiles/work-laptop");
+  assert!(folder.join("profile.yml").is_file());
+  assert!(folder.join("config").is_dir());
+  assert!(folder.join("assets/wallpapers").is_dir());
+
+  let list = json(&dotforge(config.path(), &["--json", "profile", "list"]));
+  assert_eq!(list["data"]["profiles"][0]["name"], "work-laptop");
+  assert_eq!(list["data"]["profiles"][0]["description"], "Office");
+  assert_eq!(list["data"]["profiles"][0]["status"], "ok");
+
+  let show = json(&dotforge(
+    config.path(),
+    &["--json", "profile", "show", "work-laptop"],
+  ));
+  assert_eq!(show["data"]["profile"]["device"]["type"], "laptop");
+
+  let validate = dotforge(config.path(), &["profile", "validate", "work-laptop"]);
+  assert_eq!(validate.status.code(), Some(0));
+}
+
+#[test]
+fn create_refuses_to_overwrite() {
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "desk", PROFILE);
+
+  let output = dotforge(config.path(), &["--json", "profile", "create", "desk"]);
+  assert_eq!(output.status.code(), Some(6));
+  assert_eq!(json(&output)["error"]["kind"], "already_exists");
+
+  // The existing profile is untouched.
+  let contents = fs::read_to_string(config.path().join("profiles/desk/profile.yml")).unwrap();
+  assert_eq!(contents, PROFILE);
+}
+
+#[test]
+fn create_rejects_bad_names_with_a_suggestion() {
+  let config = TempDir::new().unwrap();
+  let output = dotforge(config.path(), &["profile", "create", "My Desk"]);
+
+  assert_eq!(output.status.code(), Some(4));
+  assert!(String::from_utf8_lossy(&output.stderr).contains("'my-desk'"));
+}
+
+#[test]
+fn list_survives_broken_and_missing_profiles() {
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "good", PROFILE);
+  write_profile(config.path(), "broken", "name: [oops\n");
+  fs::create_dir_all(config.path().join("profiles/empty")).unwrap();
+
+  let output = dotforge(config.path(), &["--json", "profile", "list"]);
+  assert_eq!(output.status.code(), Some(0));
+
+  let value = json(&output);
+  let status = |i: usize| value["data"]["profiles"][i]["status"].clone();
+  assert_eq!(status(0), "unreadable"); // broken
+  assert_eq!(status(1), "missing_file"); // empty
+  assert_eq!(status(2), "ok"); // good
+}
+
+#[test]
+fn list_warns_about_duplicate_display_names() {
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "one", PROFILE);
+  write_profile(config.path(), "two", PROFILE);
+
+  let value = json(&dotforge(config.path(), &["--json", "profile", "list"]));
+  let message = value["data"]["issues"][0]["message"].as_str().unwrap();
+  assert!(message.contains("'Desk'"), "{message}");
+}
+
+#[test]
+fn show_explains_a_folder_without_profile_yml() {
+  let config = TempDir::new().unwrap();
+  fs::create_dir_all(config.path().join("profiles/empty")).unwrap();
+
+  let output = dotforge(config.path(), &["profile", "show", "empty"]);
+  assert_eq!(output.status.code(), Some(3));
+  assert!(String::from_utf8_lossy(&output.stderr).contains("has no 'profile.yml'"));
+}
+
+#[test]
+fn show_a_broken_profile_points_at_the_problem() {
+  let config = TempDir::new().unwrap();
+  write_profile(
+    config.path(),
+    "desk",
+    &PROFILE.replace("type: desktop", "type: toaster"),
+  );
+
+  let output = dotforge(config.path(), &["--json", "profile", "show", "desk"]);
+  assert_eq!(output.status.code(), Some(4));
+  assert_eq!(json(&output)["error"]["field"], "device.type");
+}
+
+#[test]
+fn show_by_path() {
+  let config = TempDir::new().unwrap();
+  let repo_profile = concat!(env!("CARGO_MANIFEST_DIR"), "/profiles/test");
+
+  let value = json(&dotforge(
+    config.path(),
+    &["--json", "profile", "show", repo_profile],
+  ));
+  assert_eq!(value["data"]["profile"]["name"], "Test profile");
+}
