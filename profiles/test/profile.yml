@@ -1,6 +1,6 @@
 name: Test profile
 description: This is a test profile.
-version: 1
+format_version: 1
 
 device:
   type: desktop

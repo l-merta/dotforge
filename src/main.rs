@@ -1,25 +1,26 @@
-use std::path::Path;
-
 use clap::Parser;
 
 use cli::{Cli, Commands};
 
 mod catalog;
 mod cli;
+mod error;
+mod exit_code;
+mod output;
+mod paths;
 mod profile;
+mod validation;
 
-fn main() {
+fn main() -> std::process::ExitCode {
   let cli = Cli::parse();
-  let catalog_path = Path::new("catalog");
-  let profiles_path = Path::new("profiles");
 
-  match cli.command {
-    Commands::Catalog { command } => {
-      cli::catalog::handle(command, catalog_path);
-    }
+  // 1. Run the command. It returns data, it does not print anything.
+  let result = match cli.command {
+    Commands::Catalog { command } => cli::catalog::handle(command),
+    Commands::Profile { command } => cli::profile::handle(command),
+  };
 
-    Commands::Profile { command } => {
-      cli::profile::handle(command, profiles_path);
-    }
-  }
+  // 2. Print the result as text or JSON and exit with the matching code.
+  let exit_code = output::print_result(result, cli.json);
+  std::process::ExitCode::from(exit_code.code())
 }

@@ -6,21 +6,25 @@ pub mod profile;
 #[derive(Parser, Debug)]
 #[command(name = "dotforge")]
 #[command(version)]
-#[command(about = "Dotforge - A Linux desktop setup and rice manager")]
+#[command(about = "DotForge - A Linux desktop setup and rice manager")]
 pub struct Cli {
+  /// Print the result as JSON instead of text (works with every command)
+  #[arg(long, global = true)]
+  pub json: bool,
+
   #[command(subcommand)]
   pub command: Commands,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-  /// Manage the Dotforge catalog
+  /// Browse and check the DotForge catalog
   Catalog {
     #[command(subcommand)]
     command: catalog::CatalogCommands,
   },
 
-  /// Manage Dotforge profiles
+  /// Manage DotForge profiles
   Profile {
     #[command(subcommand)]
     command: profile::ProfileCommands,
