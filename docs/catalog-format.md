@@ -82,10 +82,14 @@ installation:
   arch:
     packages: [steam]                     # official repositories, installed with pacman
     aur: [heroic-games-launcher-bin]      # the AUR, installed with paru or yay
+    repositories: [multilib]              # repositories `packages` need (optional)
 ```
 
 - `packages` and `aur` can be used together. At least one must have a
   package in it.
+- `repositories` lists pacman repositories that must be enabled for
+  `packages`, e.g. `repositories: [multilib]` for Steam. `profile status`
+  warns when one is not enabled in `/etc/pacman.conf`.
 - `aur` is only allowed for `arch`.
 - Package names use lowercase letters, digits and `@ . _ + -`.
 

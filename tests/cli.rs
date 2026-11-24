@@ -698,3 +698,233 @@ fn config_edit_creates_the_file_from_the_template() {
   let again = dotforge_with_fake_nano(config.path(), &["--json", "config", "edit"]);
   assert_eq!(json(&again)["data"]["created"], false);
 }
+
+// ---------- Milestone 4: system detection and profile status ----------
+
+/// Builds a fake system folder: an os-release file, a pacman database with
+/// `installed` packages (each `name` or `name:provides`), and a pacman.conf.
+fn fake_system(os_release: &str, installed: &[&str], pacman_conf: Option<&str>) -> TempDir {
+  let root = TempDir::new().unwrap();
+  fs::create_dir_all(root.path().join("etc")).unwrap();
+  fs::write(root.path().join("etc/os-release"), os_release).unwrap();
+
+  if let Some(conf) = pacman_conf {
+    fs::write(root.path().join("etc/pacman.conf"), conf).unwrap();
+    fs::create_dir_all(root.path().join("var/lib/pacman/local")).unwrap();
+  }
+
+  for package in installed {
+    let (name, provides) = package.split_once(':').unwrap_or((package, ""));
+    let dir = root
+      .path()
+      .join(format!("var/lib/pacman/local/{name}-1.0-1"));
+    fs::create_dir_all(&dir).unwrap();
+    let mut desc = format!("%NAME%\n{name}\n\n");
+    if !provides.is_empty() {
+      desc.push_str(&format!("%PROVIDES%\n{provides}=1.0\n\n"));
+    }
+    fs::write(dir.join("desc"), desc).unwrap();
+  }
+
+  root
+}
+
+const ARCH: &str = "NAME=\"Arch Linux\"\nID=arch\n";
+const CONF: &str = "[options]\n[core]\n[extra]\n#[multilib]\n";
+
+fn dotforge_on(system: &Path, config: &Path, path_extra: Option<&Path>, args: &[&str]) -> Output {
+  let mut path = std::env::var("PATH").unwrap_or_default();
+  if let Some(extra) = path_extra {
+    path = format!("{}:{path}", extra.display());
+  }
+  Command::new(env!("CARGO_BIN_EXE_dotforge"))
+    .args(args)
+    .env("DOTFORGE_CONFIG_DIR", config)
+    .env("DOTFORGE_SYSTEM_ROOT", system)
+    .env("PATH", path)
+    .current_dir(std::env::temp_dir())
+    .output()
+    .expect("failed to run dotforge")
+}
+
+#[test]
+fn system_show_detects_an_arch_based_system() {
+  use std::os::unix::fs::PermissionsExt;
+
+  let system = fake_system(
+    "NAME=\"EndeavourOS\"\nID=endeavouros\nID_LIKE=arch\n",
+    &["kitty", "git"],
+    Some(CONF),
+  );
+  let config = TempDir::new().unwrap();
+
+  let bin = config.path().join("bin");
+  fs::create_dir_all(&bin).unwrap();
+  fs::write(bin.join("yay"), "#!/bin/sh\n").unwrap();
+  fs::set_permissions(bin.join("yay"), fs::Permissions::from_mode(0o755)).unwrap();
+
+  let output = dotforge_on(
+    system.path(),
+    config.path(),
+    Some(&bin),
+    &["--json", "system", "show"],
+  );
+  let data = &json(&output)["data"];
+
+  assert_eq!(data["name"], "EndeavourOS");
+  assert_eq!(data["family"], "arch");
+  assert_eq!(data["supported"], true);
+  assert_eq!(data["package_manager"], "pacman");
+  assert_eq!(data["installed_packages"], 2);
+  assert_eq!(data["aur_helper"], "yay");
+  assert_eq!(data["repositories"], serde_json::json!(["core", "extra"]));
+}
+
+#[test]
+fn system_show_on_an_unsupported_system() {
+  let system = fake_system("NAME=\"Ubuntu\"\nID=ubuntu\nID_LIKE=debian\n", &[], None);
+  let config = TempDir::new().unwrap();
+
+  let output = dotforge_on(
+    system.path(),
+    config.path(),
+    None,
+    &["--json", "system", "show"],
+  );
+  assert_eq!(output.status.code(), Some(0));
+
+  let data = &json(&output)["data"];
+  assert_eq!(data["supported"], false);
+  assert!(data["problem"].as_str().unwrap().contains("Ubuntu"));
+}
+
+#[test]
+fn profile_status_lists_what_is_missing() {
+  let system = fake_system(ARCH, &["kitty", "xdg-desktop-portal"], Some(CONF));
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "desk", PROFILE);
+
+  let output = dotforge_on(
+    system.path(),
+    config.path(),
+    None,
+    &["--json", "profile", "status", "desk"],
+  );
+  assert_eq!(output.status.code(), Some(0));
+
+  let data = &json(&output)["data"];
+  assert_eq!(data["satisfied"], false);
+  assert_eq!(data["counts"]["installed"], 2);
+  assert_eq!(data["counts"]["missing"], 2);
+  assert_eq!(
+    data["to_install"]["packages"],
+    serde_json::json!(["xdg-desktop-portal-hyprland", "hyprland"])
+  );
+}
+
+#[test]
+fn provided_packages_count_as_installed() {
+  // hyprland-git "provides" hyprland, so Hyprland is already there.
+  let system = fake_system(
+    ARCH,
+    &[
+      "kitty",
+      "xdg-desktop-portal",
+      "xdg-desktop-portal-hyprland",
+      "hyprland-git:hyprland",
+    ],
+    Some(CONF),
+  );
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "desk", PROFILE);
+
+  let output = dotforge_on(
+    system.path(),
+    config.path(),
+    None,
+    &["profile", "status", "desk"],
+  );
+  let text = String::from_utf8_lossy(&output.stdout);
+  assert!(
+    text.contains("This machine already matches the profile."),
+    "{text}"
+  );
+}
+
+#[test]
+fn profile_status_refuses_an_invalid_profile() {
+  let system = fake_system(ARCH, &[], Some(CONF));
+  let config = TempDir::new().unwrap();
+  write_profile(
+    config.path(),
+    "desk",
+    &PROFILE.replace("hyprland", "hyprlnd"),
+  );
+
+  let output = dotforge_on(
+    system.path(),
+    config.path(),
+    None,
+    &["profile", "status", "desk"],
+  );
+  assert_eq!(output.status.code(), Some(4));
+  assert!(String::from_utf8_lossy(&output.stderr).contains("profile validate"));
+}
+
+#[test]
+fn profile_status_on_an_unsupported_system() {
+  let system = fake_system("NAME=\"Fedora Linux\"\nID=fedora\n", &[], None);
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "desk", PROFILE);
+
+  let output = dotforge_on(
+    system.path(),
+    config.path(),
+    None,
+    &["--json", "profile", "status", "desk"],
+  );
+  let data = &json(&output)["data"];
+
+  assert_eq!(output.status.code(), Some(0));
+  assert_eq!(data["counts"]["unsupported"], 4);
+  assert_eq!(data["counts"]["missing"], 0);
+}
+
+#[test]
+fn profile_status_warns_about_multilib_and_aur_helper() {
+  let system = fake_system(ARCH, &[], Some(CONF));
+  let config = TempDir::new().unwrap();
+  write_profile(
+    config.path(),
+    "games",
+    &PROFILE.replace(
+      "terminal: kitty",
+      "terminal: kitty\n  gaming: [steam, heroic]",
+    ),
+  );
+
+  // An empty PATH extra and a clean PATH: no paru or yay anywhere.
+  let output = Command::new(env!("CARGO_BIN_EXE_dotforge"))
+    .args(["--json", "profile", "status", "games"])
+    .env("DOTFORGE_CONFIG_DIR", config.path())
+    .env("DOTFORGE_SYSTEM_ROOT", system.path())
+    .env("PATH", "/nonexistent")
+    .output()
+    .unwrap();
+
+  let notes = json(&output)["data"]["notes"].clone();
+  let messages: Vec<&str> = notes
+    .as_array()
+    .unwrap()
+    .iter()
+    .map(|n| n["message"].as_str().unwrap())
+    .collect();
+  assert!(
+    messages.iter().any(|m| m.contains("'multilib'")),
+    "{messages:?}"
+  );
+  assert!(
+    messages.iter().any(|m| m.contains("neither paru nor yay")),
+    "{messages:?}"
+  );
+}

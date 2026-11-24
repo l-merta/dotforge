@@ -173,6 +173,11 @@ pub struct PackageInstallation {
   /// helper (paru or yay). Only valid for the `arch` family.
   #[serde(default)]
   pub aur: Vec<String>,
+
+  /// Package repositories that must be enabled for `packages`, e.g.
+  /// `multilib` for Steam. Arch only.
+  #[serde(default)]
+  pub repositories: Vec<String>,
 }
 
 impl PackageInstallation {

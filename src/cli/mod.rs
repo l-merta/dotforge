@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 pub mod catalog;
 pub mod config;
 pub mod profile;
+pub mod system;
 
 #[derive(Parser, Debug)]
 #[command(name = "dotforge")]
@@ -29,6 +30,12 @@ pub enum Commands {
   Profile {
     #[command(subcommand)]
     command: profile::ProfileCommands,
+  },
+
+  /// See what DotForge detects about this machine
+  System {
+    #[command(subcommand)]
+    command: system::SystemCommands,
   },
 
   /// Show or change DotForge's own settings

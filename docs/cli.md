@@ -65,7 +65,9 @@ These numbers will not change. New codes may be added later.
 
 If `$XDG_CONFIG_HOME` is set, `~/.config` is replaced by it. Setting
 `$DOTFORGE_CONFIG_DIR` points DotForge at a completely different folder
-(the tests use this).
+(the tests use this). `$DOTFORGE_SYSTEM_ROOT` does the same for the system
+files DotForge reads, such as `/etc/os-release` (see
+[system-and-status.md](system-and-status.md)).
 
 ## Settings
 
