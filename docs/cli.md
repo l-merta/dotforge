@@ -36,7 +36,7 @@ The command could not run:
 ```
 
 `error.kind` is one of `not_found`, `already_exists`, `io`, `parse`,
-`invalid`, `no_config_dir`, `not_implemented`. Parse errors also include `file`,
+`invalid`, `editor`, `no_config_dir`, `not_implemented`. Parse errors also include `file`,
 `field`, `line`, `column` and `reason`.
 
 In text mode, results go to stdout and errors to stderr.
@@ -61,7 +61,31 @@ These numbers will not change. New codes may be added later.
 |---|---|
 | Your profiles | `~/.config/dotforge/profiles/<name>/profile.yml` |
 | Your catalog entries | `~/.config/dotforge/catalog/` |
+| DotForge settings | `~/.config/dotforge/config.yml` |
 
 If `$XDG_CONFIG_HOME` is set, `~/.config` is replaced by it. Setting
 `$DOTFORGE_CONFIG_DIR` points DotForge at a completely different folder
 (the tests use this).
+
+## Settings
+
+DotForge's own settings live in `~/.config/dotforge/config.yml`. The
+file is optional: every setting has a default. Unknown settings are
+errors, so typos are caught.
+
+```yaml
+editor: nano
+```
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `editor` | `nano` | The program `dotforge profile edit` and `dotforge config edit` open files with. Arguments are allowed, split by spaces: `code --wait`, `kate -b`. The file path is added at the end. |
+
+```sh
+dotforge config show    # the settings in use, and whether each is a default
+dotforge config edit    # open config.yml (created from a template if missing)
+```
+
+Graphical editors usually return immediately, before you have finished
+editing. Give them their "wait" option (`code --wait`, `kate -b`,
+`subl -w`) so DotForge can check the file after you close it.

@@ -27,6 +27,7 @@ This puts the `dotforge` program in `~/.cargo/bin`.
 dotforge profile create desktop       # make your first profile
 dotforge profile list                 # see your profiles
 dotforge profile show desktop         # what a profile contains
+dotforge profile edit desktop         # open it in your editor (nano by default)
 dotforge profile validate desktop     # check it for mistakes
 dotforge catalog list                 # everything DotForge knows about
 dotforge catalog show hyprland        # details of one entry
@@ -34,7 +35,9 @@ dotforge catalog deps hyprland        # what it needs, in install order
 dotforge --json profile list          # any command, as JSON
 ```
 
-Your profiles live in `~/.config/dotforge/profiles/`.
+Your profiles live in `~/.config/dotforge/profiles/`. DotForge's own
+settings (such as which editor to use) are in `~/.config/dotforge/config.yml`;
+see them with `dotforge config show` and change them with `dotforge config edit`.
 
 ## Documentation
 

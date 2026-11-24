@@ -154,6 +154,36 @@ echo $?
 You see `error: unrecognized subcommand 'fly'`. The exit code is **2**
 (wrong command line).
 
+### 1.12 DotForge's own settings
+
+```sh
+dotforge config show
+```
+
+You see `Settings file: /tmp/dotforge-test/config.yml (not created yet,
+using defaults)` and `editor: nano  (default)`.
+
+```sh
+dotforge config edit
+```
+
+Nano opens a new settings file with `editor: nano` in it. Change it to an
+editor you like (for example `editor: micro`, or `editor: code --wait`
+for VS Code), save (Ctrl+O, Enter) and quit (Ctrl+X). You see `Saved
+.../config.yml (new file). The settings are valid.` Run `dotforge config
+show` again: the editor now shows your choice, without `(default)`.
+
+Now make a typo on purpose:
+
+```sh
+echo "editr: vim" > $DOTFORGE_CONFIG_DIR/config.yml
+dotforge config show
+echo $?
+```
+
+You see an error about `editr` (an unknown field) and exit code **4**.
+Fix it with `echo "editor: nano" > $DOTFORGE_CONFIG_DIR/config.yml`.
+
 ---
 
 ## Milestone 2: profile management
@@ -301,6 +331,30 @@ echo $?
 
 You see `'profile apply' is not implemented yet (planned for Milestone 5)`.
 The exit code is **5**.
+
+### 2.13 Edit a profile in your editor
+
+```sh
+dotforge profile edit desktop
+```
+
+Your editor (nano unless you changed it in 1.12) opens the desktop
+profile. Change the description, save and quit. You see `Saved ...` and
+then the same check as `profile validate`, ending with `The profile is
+valid.`
+
+Now try an editor that doesn't exist:
+
+```sh
+echo "editor: no-such-editor" > $DOTFORGE_CONFIG_DIR/config.yml
+dotforge profile edit desktop
+echo $?
+```
+
+You see `could not open the editor 'no-such-editor': the program
+'no-such-editor' was not found`, with a hint pointing at `config.yml`.
+The exit code is **1**. Put it back with
+`echo "editor: nano" > $DOTFORGE_CONFIG_DIR/config.yml`.
 
 ---
 
