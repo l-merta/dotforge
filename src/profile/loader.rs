@@ -25,7 +25,8 @@ pub fn resolve(name_or_path: &str, profiles_dir: &Path) -> Result<PathBuf, AppEr
     profiles_dir.join(name_or_path)
   };
 
-  let file = if path.is_dir() {
+  let is_folder = path.is_dir();
+  let file = if is_folder {
     path.join(PROFILE_FILE)
   } else {
     path
@@ -35,7 +36,11 @@ pub fn resolve(name_or_path: &str, profiles_dir: &Path) -> Result<PathBuf, AppEr
     return Ok(file);
   }
 
-  let hint = if looks_like_path {
+  let hint = if is_folder {
+    format!(
+      "the folder exists but has no '{PROFILE_FILE}' in it; create one or run 'dotforge profile create <name>'"
+    )
+  } else if looks_like_path {
     format!(
       "expected a profile folder or a '{PROFILE_FILE}' file at '{}'",
       file.display()

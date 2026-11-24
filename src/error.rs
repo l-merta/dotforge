@@ -20,6 +20,21 @@ pub enum AppError {
     hint: Option<String>,
   },
 
+  /// Something with this name already exists.
+  #[error("{what} '{name}' already exists")]
+  AlreadyExists {
+    what: &'static str,
+    name: String,
+    hint: Option<String>,
+  },
+
+  /// A file could not be written to disk.
+  #[error("could not write '{}': {source}", path.display())]
+  Write {
+    path: PathBuf,
+    source: std::io::Error,
+  },
+
   /// A file could not be read from disk.
   #[error("could not read '{}': {source}", path.display())]
   Io {
@@ -85,7 +100,8 @@ impl AppError {
   pub fn exit_code(&self) -> ExitCode {
     match self {
       AppError::NotFound { .. } => ExitCode::NotFound,
-      AppError::Io { .. } | AppError::NoConfigDir => ExitCode::Failure,
+      AppError::Io { .. } | AppError::Write { .. } | AppError::NoConfigDir => ExitCode::Failure,
+      AppError::AlreadyExists { .. } => ExitCode::AlreadyExists,
       AppError::Parse { .. } | AppError::Invalid { .. } => ExitCode::Invalid,
       AppError::NotImplemented { .. } => ExitCode::NotImplemented,
     }
@@ -95,7 +111,8 @@ impl AppError {
   pub fn kind(&self) -> &'static str {
     match self {
       AppError::NotFound { .. } => "not_found",
-      AppError::Io { .. } => "io",
+      AppError::Io { .. } | AppError::Write { .. } => "io",
+      AppError::AlreadyExists { .. } => "already_exists",
       AppError::Parse { .. } => "parse",
       AppError::Invalid { .. } => "invalid",
       AppError::NoConfigDir => "no_config_dir",
@@ -106,7 +123,9 @@ impl AppError {
   /// An optional tip telling the user what they can do next.
   pub fn hint(&self) -> Option<&str> {
     match self {
-      AppError::NotFound { hint, .. } | AppError::Invalid { hint, .. } => hint.as_deref(),
+      AppError::NotFound { hint, .. }
+      | AppError::Invalid { hint, .. }
+      | AppError::AlreadyExists { hint, .. } => hint.as_deref(),
       _ => None,
     }
   }
