@@ -11,6 +11,7 @@ mod output;
 mod paths;
 mod profile;
 mod settings;
+mod system;
 mod validation;
 
 fn main() -> std::process::ExitCode {
@@ -21,6 +22,7 @@ fn main() -> std::process::ExitCode {
     Commands::Catalog { command } => cli::catalog::handle(command),
     Commands::Profile { command } => cli::profile::handle(command),
     Commands::Config { command } => cli::config::handle(command),
+    Commands::System { command } => cli::system::handle(command),
   };
 
   // 2. Print the result as text or JSON and exit with the matching code.

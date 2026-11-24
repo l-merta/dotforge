@@ -6,7 +6,7 @@ DotForge looks each piece up in its **catalog**, and, eventually, makes
 your machine match the profile.
 
 > **Work in progress.** DotForge is an early prototype. It can create, list and
-> check profiles and browse a catalog of about 40 desktop components and apps, but it does not install or change
+> check profiles and browse a catalog of about 40 desktop components and apps, and compare a profile with your machine, but it does not install or change
 > anything yet. Arch Linux is the first supported system.
 
 ## Build and install from source
@@ -29,6 +29,8 @@ dotforge profile list                 # see your profiles
 dotforge profile show desktop         # what a profile contains
 dotforge profile edit desktop         # open it in your editor (nano by default)
 dotforge profile validate desktop     # check it for mistakes
+dotforge profile status desktop       # compare it with this machine (read-only)
+dotforge system show                  # what DotForge detects about this machine
 dotforge catalog list                 # everything DotForge knows about
 dotforge catalog show hyprland        # details of one entry
 dotforge catalog deps hyprland        # what it needs, in install order
@@ -45,4 +47,5 @@ see them with `dotforge config show` and change them with `dotforge config edit`
 - [Catalog format](docs/catalog-format.md)
 - [Adding a catalog entry](docs/adding-catalog-entries.md)
 - [Command line conventions: `--json`, exit codes, file locations](docs/cli.md)
+- [System detection and profile status](docs/system-and-status.md)
 - [Hand tests: try each feature yourself](docs/manual-tests.md)

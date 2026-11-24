@@ -14,6 +14,8 @@ use crate::profile::model::{DeviceType, Profile};
 use crate::profile::template::{self, NewProfile};
 use crate::profile::{loader, validate};
 use crate::settings;
+use crate::system::compare::{self, Comparison, Status as EntryStatus};
+use crate::system::host::Host;
 use crate::validation::{Issue, Severity, count, render_issues};
 
 #[derive(Subcommand, Debug)]
@@ -57,6 +59,12 @@ pub enum ProfileCommands {
     profile: String,
   },
 
+  /// Compare a profile with this machine: what is installed, what is missing
+  Status {
+    /// A profile name, or a path to a profile folder or profile.yml
+    profile: String,
+  },
+
   /// Apply a profile (not implemented yet)
   Apply {
     /// Profile name
@@ -88,6 +96,8 @@ pub fn handle(command: ProfileCommands) -> Result<Report, AppError> {
     ProfileCommands::Edit { profile } => edit(&profile),
 
     ProfileCommands::Validate { profile } => validate_profile(&profile),
+
+    ProfileCommands::Status { profile } => status(&profile),
 
     ProfileCommands::Apply { .. } => Err(AppError::NotImplemented {
       command: "profile apply",
@@ -293,6 +303,127 @@ impl Render for EditedProfile {
       self.file,
       self.validation.render_text()
     )
+  }
+}
+
+// ---------- status ----------
+
+fn status(name_or_path: &str) -> Result<Report, AppError> {
+  let file = loader::resolve(name_or_path, &paths::profiles_dir()?)?;
+  let validation = check(&file)?;
+
+  if !validation.valid {
+    return Err(AppError::Invalid {
+      message: format!(
+        "the profile '{}' has {} error(s), so it can't be compared yet",
+        validation.profile, validation.errors
+      ),
+      hint: Some(format!(
+        "run 'dotforge profile validate {name_or_path}' to see them"
+      )),
+    });
+  }
+
+  let profile = loader::load(&file)?;
+  let catalog = Catalog::load()?;
+  let host = Host::detect();
+  let comparison = compare::compare(&profile, &file.display().to_string(), &catalog, &host)?;
+
+  Ok(Report::new(&comparison))
+}
+
+impl Render for Comparison {
+  fn render_text(&self) -> String {
+    let mut text = format!(
+      "Profile '{}' compared with this machine ({}):\n\n",
+      self.profile, self.host
+    );
+
+    for entry in &self.entries {
+      let (mark, detail) = match entry.status {
+        EntryStatus::Installed => ("ok  ", "installed".to_string()),
+        EntryStatus::Missing => {
+          let mut packages = entry.missing_packages.clone();
+          packages.extend(entry.missing_aur.iter().map(|p| format!("{p} (AUR)")));
+          ("need", format!("missing: {}", packages.join(", ")))
+        }
+        EntryStatus::Unsupported => ("??  ", "can't check here".to_string()),
+      };
+
+      let why = if entry
+        .wanted_by
+        .iter()
+        .all(|w| w.starts_with("dependency of"))
+      {
+        format!("  ({})", entry.wanted_by.join(", "))
+      } else {
+        String::new()
+      };
+
+      text.push_str(&format!("  [{mark}] {:28} {detail}{why}\n", entry.id));
+    }
+
+    text.push_str(&format!(
+      "\nSummary: {} installed, {} missing, {} can't be checked here.\n",
+      self.counts.installed, self.counts.missing, self.counts.unsupported
+    ));
+
+    if self.counts.unsupported > 0
+      && let Some(reason) = self.entries.iter().find_map(|e| e.reason.as_deref())
+    {
+      text.push_str(&format!("Why: {reason}\n"));
+    }
+
+    let install = &self.to_install;
+    if !install.packages.is_empty() || !install.aur.is_empty() {
+      text.push_str("\nTo match the profile, DotForge would install:\n");
+      if !install.packages.is_empty() {
+        let manager = install
+          .package_manager
+          .as_deref()
+          .unwrap_or("the package manager");
+        text.push_str(&format!(
+          "  with {manager}: {}\n",
+          install.packages.join(" ")
+        ));
+      }
+      if !install.aur.is_empty() {
+        let helper = install
+          .aur_helper
+          .as_deref()
+          .unwrap_or("an AUR helper (paru or yay)");
+        text.push_str(&format!("  with {helper}: {}\n", install.aur.join(" ")));
+      }
+    }
+
+    let setup: Vec<String> = self
+      .entries
+      .iter()
+      .flat_map(|e| {
+        e.setup
+          .iter()
+          .map(move |action| format!("{} ({})", action, e.id))
+      })
+      .collect();
+    if !setup.is_empty() {
+      text.push_str("\nSetup steps (checked when applying, from Milestone 5):\n");
+      for step in setup {
+        text.push_str(&format!("  - {step}\n"));
+      }
+    }
+
+    if !self.notes.is_empty() {
+      text.push('\n');
+      text.push_str(&render_issues(&self.notes));
+    }
+
+    if self.satisfied {
+      text.push_str("\nThis machine already matches the profile.\n");
+    } else {
+      text.push_str("\nNothing was changed. This only shows what is different.\n");
+    }
+
+    text
   }
 }
 

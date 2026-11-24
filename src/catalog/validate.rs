@@ -186,6 +186,22 @@ fn check_installation(r: &mut Report) {
       r.error(Some(&field), "lists no packages");
     }
 
+    for repository in &install.repositories {
+      if !is_valid_id(repository) {
+        r.error(
+          Some(&format!("{field}.repositories")),
+          format!("'{repository}' is not a valid repository name"),
+        );
+      }
+    }
+
+    if !install.repositories.is_empty() && install.packages.is_empty() {
+      r.warning(
+        Some(&format!("{field}.repositories")),
+        "repositories only matter for 'packages' (not for AUR packages)",
+      );
+    }
+
     if !install.aur.is_empty() && family != "arch" {
       r.error(
         Some(&format!("{field}.aur")),

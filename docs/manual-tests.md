@@ -24,7 +24,7 @@ so run it again in each new terminal.
 When you are done, clean up with:
 
 ```sh
-rm -rf /tmp/dotforge-test /tmp/broken
+rm -rf /tmp/dotforge-test /tmp/broken /tmp/fake-ubuntu
 unset DOTFORGE_CONFIG_DIR
 ```
 
@@ -469,3 +469,113 @@ dotforge --json catalog deps docker
 
 You get JSON with an `order` list. Each step has `id`, `packages`, `aur`
 and `setup` (with `"action": "enable_service"` and so on).
+
+---
+
+## Milestone 4: detecting your system and comparing it with a profile
+
+These commands only **read** your system. They never install or change
+anything, so it is safe to run them on your real machine.
+
+### 4.1 What DotForge sees
+
+```sh
+dotforge system show
+```
+
+You see your distribution (for example `Arch Linux` or `EndeavourOS`),
+`DotForge family: arch`, `package manager: pacman`, the number of
+installed packages, your AUR helper (`yay` or `paru` if you have one), the
+enabled repositories (`core, extra`, plus `multilib` if you turned it on)
+and `systemd: yes`. In a desktop session, `session` is `wayland` or `x11`.
+
+### 4.2 The package count is right
+
+```sh
+pacman -Q | wc -l
+```
+
+This prints the same number as `installed packages` in 4.1.
+
+### 4.3 Compare the example profile with your machine
+
+```sh
+dotforge profile status ./profiles/test
+echo $?
+```
+
+You see one line per program the profile needs, dependencies included,
+in install order:
+
+- `[ok  ]` means it is already installed;
+- `[need]` means something is missing, and the line says which package
+  (`(AUR)` if it comes from the AUR).
+
+Then there is a summary (`... installed, ... missing`), the packages
+DotForge **would** install (split into pacman and your AUR helper), the
+setup steps, and `Nothing was changed.` The exit code is **0**.
+
+If `multilib` isn't in your repositories from 4.1, there is also a
+warning that Steam needs the `multilib` repository.
+
+### 4.4 A profile you already match
+
+```sh
+mkdir -p $DOTFORGE_CONFIG_DIR/profiles/mine
+printf 'format_version: 1\nname: Mine\ndevice:\n  type: desktop\n  os:\n    family: arch\n    distribution: arch\napplications:\n  development: [git]\n' > $DOTFORGE_CONFIG_DIR/profiles/mine/profile.yml
+dotforge profile status mine
+```
+
+If Git is installed (`pacman -Q git` shows it), you see `[ok  ] git` and
+`This machine already matches the profile.` If it isn't, you see
+`[need] git` and `with pacman: git`.
+
+### 4.5 Packages that "provide" another one count too
+
+```sh
+pacman -Qi bash | grep Provides
+```
+
+You see `Provides        : sh`, which means Bash also counts as "sh".
+Many packages provide other names like this. For example, `hyprland-git`
+provides `hyprland`. DotForge counts a provided name as installed, so if you use a
+`-git` version of something in a profile, `profile status` still shows it
+as `[ok  ]`.
+
+### 4.6 A system DotForge doesn't support yet
+
+Make a fake Ubuntu system and point DotForge at it:
+
+```sh
+mkdir -p /tmp/fake-ubuntu/etc
+printf 'NAME="Ubuntu"\nID=ubuntu\nID_LIKE=debian\nVERSION_ID="24.04"\n' > /tmp/fake-ubuntu/etc/os-release
+DOTFORGE_SYSTEM_ROOT=/tmp/fake-ubuntu dotforge system show
+DOTFORGE_SYSTEM_ROOT=/tmp/fake-ubuntu dotforge profile status ./profiles/test
+```
+
+`system show` says `Ubuntu 24.04`, `DotForge family: not supported yet`,
+and a note that only the Arch family is supported. `profile status` marks
+every line `[??  ]` (can't check here) and explains why.
+`DOTFORGE_SYSTEM_ROOT` only applies to the command it is written in front
+of.
+
+### 4.7 A profile with errors is refused
+
+```sh
+sed -i 's/development: \[git\]/development: [gti]/' $DOTFORGE_CONFIG_DIR/profiles/mine/profile.yml
+dotforge profile status mine
+echo $?
+```
+
+You see that the profile has 1 error and can't be compared yet, with a
+hint to run `dotforge profile validate mine`. The exit code is **4**.
+
+### 4.8 Status as JSON
+
+```sh
+dotforge --json profile status ./profiles/test | grep -E '"satisfied"|"(installed|missing|unsupported)": [0-9]'
+```
+
+You see `"satisfied": false` (unless you have everything installed!) and
+the `installed` and `missing` counts. Scripts read `data.to_install` for
+the exact package lists.
