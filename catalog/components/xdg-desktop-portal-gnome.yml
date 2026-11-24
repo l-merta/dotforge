@@ -1,0 +1,15 @@
+id: xdg-desktop-portal-gnome
+name: XDG Desktop Portal (GNOME)
+description: Portal backend used by GNOME and Niri
+category: component
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [xdg-desktop-portal-gnome]
+
+dependencies: [xdg-desktop-portal]
+
+capabilities: [portal]

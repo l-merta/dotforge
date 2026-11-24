@@ -1,0 +1,15 @@
+id: xdg-desktop-portal-wlr
+name: XDG Desktop Portal (wlroots)
+description: Screen sharing for wlroots compositors such as Sway
+category: component
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [xdg-desktop-portal-wlr]
+
+dependencies: [xdg-desktop-portal]
+
+capabilities: [portal]

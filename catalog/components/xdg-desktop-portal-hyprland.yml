@@ -1,0 +1,15 @@
+id: xdg-desktop-portal-hyprland
+name: XDG Desktop Portal (Hyprland)
+description: Screen sharing and other portal features for Hyprland
+category: component
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [xdg-desktop-portal-hyprland]
+
+dependencies: [xdg-desktop-portal]
+
+capabilities: [portal]

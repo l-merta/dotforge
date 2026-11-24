@@ -1,0 +1,19 @@
+id: foot
+name: Foot
+description: Fast, lightweight terminal emulator for Wayland
+category: application
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [foot]
+
+capabilities: [terminal, theme]
+
+configuration:
+  directory: ~/.config/foot
+
+integration:
+  themes: true

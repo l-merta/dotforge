@@ -1,0 +1,19 @@
+id: kde-plasma
+name: KDE Plasma
+description: Full-featured, highly customisable desktop environment
+category: desktop
+
+platforms: [linux]
+protocols: [wayland, x11]
+
+installation:
+  arch:
+    packages: [plasma-meta]
+
+dependencies: [sddm]
+
+capabilities: [compositor, window-management, workspaces, panel, launcher, notifications, wallpaper, theme]
+
+integration:
+  themes: true
+  wallpapers: true

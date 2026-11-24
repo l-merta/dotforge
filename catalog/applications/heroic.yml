@@ -1,0 +1,11 @@
+id: heroic
+name: Heroic Games Launcher
+description: Launcher for Epic Games, GOG and Amazon Prime games
+category: application
+
+platforms: [linux]
+protocols: [wayland, x11]
+
+installation:
+  arch:
+    aur: [heroic-games-launcher-bin]

@@ -1,0 +1,11 @@
+id: firefox
+name: Firefox
+description: Web browser
+category: application
+
+platforms: [linux]
+protocols: [wayland, x11]
+
+installation:
+  arch:
+    packages: [firefox]

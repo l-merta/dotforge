@@ -1,0 +1,23 @@
+id: sway
+name: Sway
+description: Tiling Wayland compositor compatible with i3
+category: compositor
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [sway]
+
+dependencies: [xdg-desktop-portal-wlr]
+
+capabilities: [compositor, window-management, keybindings, workspaces]
+
+configuration:
+  directory: ~/.config/sway
+
+integration:
+  themes: true
+  wallpapers: true
+  keybindings: true

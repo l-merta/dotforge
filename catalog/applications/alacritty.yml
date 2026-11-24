@@ -1,0 +1,19 @@
+id: alacritty
+name: Alacritty
+description: Fast, minimal GPU-accelerated terminal emulator
+category: application
+
+platforms: [linux]
+protocols: [wayland, x11]
+
+installation:
+  arch:
+    packages: [alacritty]
+
+capabilities: [terminal, theme]
+
+configuration:
+  directory: ~/.config/alacritty
+
+integration:
+  themes: true

@@ -12,9 +12,40 @@ pub fn is_valid_id(id: &str) -> bool {
       .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
+/// Arch package names: lowercase letters, digits and `@ . _ + -`,
+/// not starting with `-` or `.`.
+pub fn is_valid_package(name: &str) -> bool {
+  !name.is_empty()
+    && !name.starts_with('-')
+    && !name.starts_with('.')
+    && name
+      .chars()
+      .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "@._+-".contains(c))
+}
+
+/// Linux group names: start with a lowercase letter or `_`, then lowercase
+/// letters, digits, `_` or `-`.
+pub fn is_valid_group(name: &str) -> bool {
+  let mut chars = name.chars();
+  matches!(chars.next(), Some(c) if c.is_ascii_lowercase() || c == '_')
+    && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn package_and_group_names() {
+    assert!(is_valid_package("libreoffice-fresh"));
+    assert!(is_valid_package("gtk+3"));
+    assert!(!is_valid_package("Steam"));
+    assert!(!is_valid_package("rm -rf"));
+    assert!(is_valid_group("docker"));
+    assert!(is_valid_group("_flatpak"));
+    assert!(!is_valid_group("Bad Group"));
+    assert!(!is_valid_group("1abc"));
+  }
 
   #[test]
   fn valid_ids() {

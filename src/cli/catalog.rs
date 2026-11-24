@@ -7,7 +7,8 @@ use clap::Subcommand;
 use serde::Serialize;
 
 use crate::catalog::catalog::Catalog;
-use crate::catalog::model::{CatalogEntry, Category, Source};
+use crate::catalog::model::{CatalogEntry, Category, SetupAction, Source};
+use crate::catalog::resolve;
 use crate::catalog::validate;
 use crate::error::AppError;
 use crate::exit_code::ExitCode;
@@ -28,6 +29,12 @@ pub enum CatalogCommands {
     id: String,
   },
 
+  /// Show everything an entry needs, in the order it would be installed
+  Deps {
+    /// Catalog entry ID, e.g. hyprland
+    id: String,
+  },
+
   /// Check every catalog entry for mistakes
   Validate,
 }
@@ -38,6 +45,7 @@ pub fn handle(command: CatalogCommands) -> Result<Report, AppError> {
   match command {
     CatalogCommands::List { category } => Ok(Report::new(&list(&catalog, category))),
     CatalogCommands::Show { id } => show(&catalog, &id).map(|entry| Report::new(&entry)),
+    CatalogCommands::Deps { id } => deps(&catalog, &id).map(|result| Report::new(&result)),
     CatalogCommands::Validate => {
       let result = validate_catalog(&catalog);
       let exit_code = if result.errors > 0 {
@@ -186,10 +194,19 @@ impl Render for CatalogEntry {
       for package in &installation.packages {
         text.push_str(&format!("    {package}\n"));
       }
+      for package in &installation.aur {
+        text.push_str(&format!("    {package}  (AUR)\n"));
+      }
     }
+    text.push('\n');
+
+    section(
+      &mut text,
+      "Setup steps",
+      self.setup.iter().map(ToString::to_string),
+    );
 
     if let Some(configuration) = &self.configuration {
-      text.push('\n');
       section(
         &mut text,
         "Configuration",
@@ -215,6 +232,89 @@ fn section(text: &mut String, title: &str, lines: impl IntoIterator<Item = Strin
   }
 
   text.push('\n');
+}
+
+// ---------- deps ----------
+
+#[derive(Serialize)]
+pub struct DependencyPlan {
+  pub id: String,
+  /// Every entry needed, dependencies first. The last one is `id` itself.
+  pub order: Vec<PlanStep>,
+}
+
+#[derive(Serialize)]
+pub struct PlanStep {
+  pub id: String,
+  pub name: String,
+  pub category: Category,
+  /// Official repository packages for the Arch family.
+  pub packages: Vec<String>,
+  /// AUR packages for the Arch family.
+  pub aur: Vec<String>,
+  pub setup: Vec<SetupAction>,
+}
+
+fn deps(catalog: &Catalog, id: &str) -> Result<DependencyPlan, AppError> {
+  // Reuse the "did you mean" error from `show` for an unknown ID.
+  show(catalog, id)?;
+
+  let order = resolve::install_order(catalog, &[id]).map_err(|error| AppError::Invalid {
+    message: error.to_string(),
+    hint: Some("run 'dotforge catalog validate' to see every catalog problem".into()),
+  })?;
+
+  let order = order
+    .iter()
+    .filter_map(|id| catalog.get(id))
+    .map(|entry| {
+      let arch = entry.installation.package_managers.get("arch");
+      PlanStep {
+        id: entry.id.clone(),
+        name: entry.name.clone(),
+        category: entry.category,
+        packages: arch.map(|a| a.packages.clone()).unwrap_or_default(),
+        aur: arch.map(|a| a.aur.clone()).unwrap_or_default(),
+        setup: entry.setup.clone(),
+      }
+    })
+    .collect();
+
+  Ok(DependencyPlan {
+    id: id.to_string(),
+    order,
+  })
+}
+
+impl Render for DependencyPlan {
+  fn render_text(&self) -> String {
+    let mut text = format!(
+      "To install '{}', DotForge needs {} entr{} (in this order):\n\n",
+      self.id,
+      self.order.len(),
+      if self.order.len() == 1 { "y" } else { "ies" }
+    );
+
+    for (index, step) in self.order.iter().enumerate() {
+      text.push_str(&format!(
+        "  {}. {} ({})\n",
+        index + 1,
+        step.id,
+        step.category.id()
+      ));
+
+      let mut packages: Vec<String> = step.packages.clone();
+      packages.extend(step.aur.iter().map(|p| format!("{p} (AUR)")));
+      if !packages.is_empty() {
+        text.push_str(&format!("     packages: {}\n", packages.join(", ")));
+      }
+      for action in &step.setup {
+        text.push_str(&format!("     then: {action}\n"));
+      }
+    }
+
+    text
+  }
 }
 
 // ---------- validate ----------

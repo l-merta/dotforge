@@ -136,6 +136,11 @@ reported instead of being silently ignored.
 - Every ID under `applications` and `rice` exists in the catalog and has
   the right category. Close misspellings get a "did you mean" tip.
 - **Warning:** the same application listed twice.
+- **Warning:** an entry in a slot it is not made for, e.g. a notification
+  daemon as the launcher. This uses the entry's capabilities (see
+  [catalog-format.md](catalog-format.md#capabilities)).
+- **Warning:** a shell or component that only works on Wayland while the
+  compositor (or desktop) only runs on X11, or the other way round.
 
 The `system` section is not checked against the catalog yet; that comes
 when drivers and audio stacks get catalog entries.

@@ -1,0 +1,10 @@
+id: neofetch
+name: Neofetch
+description: Shows system information in the terminal (no longer developed; consider fastfetch)
+category: application
+
+platforms: [linux]
+
+installation:
+  arch:
+    aur: [neofetch]

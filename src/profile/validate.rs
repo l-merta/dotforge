@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 use super::model::Profile;
 use crate::catalog::catalog::Catalog;
-use crate::catalog::model::Category;
+use crate::catalog::model::{Capability, Category, Protocol};
 use crate::validation::Issue;
 
 pub fn validate(profile: &Profile, catalog: &Catalog) -> Vec<Issue> {
@@ -97,7 +97,128 @@ pub fn validate(profile: &Profile, catalog: &Catalog) -> Vec<Issue> {
     }
   }
 
+  check_capabilities(profile, catalog, &mut issues);
+  check_protocols(profile, catalog, &mut issues);
+
   issues
+}
+
+/// Each slot expects an entry that can actually do that job, e.g. the
+/// launcher slot needs something with the `launcher` capability.
+fn check_capabilities(profile: &Profile, catalog: &Catalog, issues: &mut Vec<Issue>) {
+  let components = &profile.rice.components;
+  let slots = [
+    (
+      "applications.terminal",
+      &profile.applications.terminal,
+      Capability::Terminal,
+    ),
+    (
+      "rice.components.taskbar",
+      &components.taskbar,
+      Capability::Panel,
+    ),
+    (
+      "rice.components.status",
+      &components.status,
+      Capability::Panel,
+    ),
+    (
+      "rice.components.launcher",
+      &components.launcher,
+      Capability::Launcher,
+    ),
+    (
+      "rice.components.notifications",
+      &components.notifications,
+      Capability::Notifications,
+    ),
+  ];
+
+  for (location, id, capability) in slots {
+    let Some(entry) = id.as_deref().and_then(|id| catalog.get(id)) else {
+      continue; // missing IDs are already reported
+    };
+
+    if !entry.capabilities.contains(&capability) {
+      issues.push(Issue::warning(
+        location,
+        format!(
+          "'{}' does not list the '{}' capability, so it may not fit this slot",
+          entry.id,
+          capability_id(capability)
+        ),
+      ));
+    }
+  }
+}
+
+/// A Wayland-only bar will not run under an X11-only window manager, and
+/// the other way round.
+fn check_protocols(profile: &Profile, catalog: &Catalog, issues: &mut Vec<Issue>) {
+  let rice = &profile.rice;
+
+  // The session is decided by the compositor, or the desktop if there is none.
+  let Some(session) = rice
+    .compositor
+    .as_deref()
+    .or(rice.desktop.as_deref())
+    .and_then(|id| catalog.get(id))
+  else {
+    return;
+  };
+  if session.protocols.is_empty() {
+    return;
+  }
+
+  let mut parts = vec![("rice.shell", &rice.shell)];
+  parts.extend(rice.components.all());
+
+  for (field, id) in parts {
+    let Some(entry) = id.as_deref().and_then(|id| catalog.get(id)) else {
+      continue;
+    };
+    if entry.protocols.is_empty() {
+      continue;
+    }
+
+    let fits = entry
+      .protocols
+      .iter()
+      .any(|p| session.protocols.contains(p));
+    if !fits {
+      let location = if field.starts_with("rice.") {
+        field.to_string()
+      } else {
+        format!("rice.components.{field}")
+      };
+      issues.push(Issue::warning(
+        location,
+        format!(
+          "'{}' only works on {}, but '{}' runs on {}",
+          entry.id,
+          protocols(&entry.protocols),
+          session.id,
+          protocols(&session.protocols)
+        ),
+      ));
+    }
+  }
+}
+
+fn protocols(list: &[Protocol]) -> String {
+  list
+    .iter()
+    .map(ToString::to_string)
+    .collect::<Vec<_>>()
+    .join(" and ")
+}
+
+fn capability_id(capability: Capability) -> String {
+  serde_json::to_value(capability)
+    .ok()
+    .and_then(|value| value.as_str().map(str::to_string))
+    .unwrap_or_default()
 }
 
 /// Checks that `id` exists in the catalog and has one of the `allowed`
@@ -186,6 +307,23 @@ mod tests {
     let issues = validate(&profile, &catalog());
     assert_eq!(count(&issues, Severity::Error), 0);
     assert_eq!(count(&issues, Severity::Warning), 1);
+  }
+
+  #[test]
+  fn wrong_capability_is_a_warning() {
+    let profile = profile("rice:\n  components:\n    launcher: dunst\n");
+    let issues = validate(&profile, &catalog());
+    assert_eq!(count(&issues, Severity::Error), 0);
+    assert_eq!(count(&issues, Severity::Warning), 1, "{issues:#?}");
+    assert!(issues[0].message.contains("'launcher'"));
+  }
+
+  #[test]
+  fn repo_test_profile_is_valid() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/test/profile.yml");
+    let profile = crate::profile::loader::load(&path).unwrap();
+    let issues = validate(&profile, &catalog());
+    assert!(issues.is_empty(), "{issues:#?}");
   }
 
   #[test]

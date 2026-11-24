@@ -1,0 +1,19 @@
+id: gnome
+name: GNOME
+description: Simple, polished desktop environment
+category: desktop
+
+platforms: [linux]
+protocols: [wayland, x11]
+
+installation:
+  arch:
+    packages: [gnome]
+
+dependencies: [gdm]
+
+capabilities: [compositor, window-management, workspaces, panel, launcher, notifications, wallpaper, theme]
+
+integration:
+  themes: true
+  wallpapers: true

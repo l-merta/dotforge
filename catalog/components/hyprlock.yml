@@ -1,0 +1,17 @@
+id: hyprlock
+name: Hyprlock
+description: Lock screen for Hyprland (its config lives in ~/.config/hypr with Hyprland's)
+category: component
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [hyprlock]
+
+capabilities: [lockscreen]
+
+integration:
+  themes: true
+  wallpapers: true

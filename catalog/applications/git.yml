@@ -1,0 +1,10 @@
+id: git
+name: Git
+description: Version control system
+category: application
+
+platforms: [linux]
+
+installation:
+  arch:
+    packages: [git]

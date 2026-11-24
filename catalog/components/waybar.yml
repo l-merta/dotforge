@@ -1,0 +1,19 @@
+id: waybar
+name: Waybar
+description: Customisable status bar for Wayland compositors
+category: component
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [waybar]
+
+capabilities: [panel]
+
+configuration:
+  directory: ~/.config/waybar
+
+integration:
+  themes: true

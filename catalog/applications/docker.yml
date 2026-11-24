@@ -1,0 +1,16 @@
+id: docker
+name: Docker
+description: Runs applications in containers
+category: application
+
+platforms: [linux]
+
+installation:
+  arch:
+    packages: [docker]
+
+setup:
+  - action: enable_service
+    service: docker.service
+  - action: add_user_to_group
+    group: docker

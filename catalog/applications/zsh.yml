@@ -1,0 +1,14 @@
+id: zsh
+name: Zsh
+description: Interactive command-line shell
+category: application
+
+platforms: [linux]
+
+installation:
+  arch:
+    packages: [zsh]
+
+setup:
+  - action: set_default_shell
+    shell: /usr/bin/zsh

@@ -163,7 +163,7 @@ impl AppError {
 /// the line and the field that caused it.
 pub fn parse_error(file: &str, error: serde_path_to_error::Error<serde_yaml::Error>) -> AppError {
   let path = error.path().to_string();
-  let field = if path == "." || path.is_empty() {
+  let field = if path == "." || path == "?" || path.is_empty() {
     None
   } else {
     Some(path)

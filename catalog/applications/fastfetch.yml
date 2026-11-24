@@ -1,0 +1,13 @@
+id: fastfetch
+name: Fastfetch
+description: Shows system information in the terminal
+category: application
+
+platforms: [linux]
+
+installation:
+  arch:
+    packages: [fastfetch]
+
+configuration:
+  directory: ~/.config/fastfetch
