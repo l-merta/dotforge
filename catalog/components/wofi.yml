@@ -1,0 +1,19 @@
+id: wofi
+name: Wofi
+description: Simple application launcher for Wayland
+category: component
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [wofi]
+
+capabilities: [launcher]
+
+configuration:
+  directory: ~/.config/wofi
+
+integration:
+  themes: true

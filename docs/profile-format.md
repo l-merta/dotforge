@@ -17,6 +17,7 @@ dotforge profile create desktop            # new profile from a starter template
 dotforge profile create work-laptop --device laptop --description "Office"
 dotforge profile list                      # all your profiles
 dotforge profile show desktop              # what a profile contains
+dotforge profile edit desktop              # open it in your editor (nano by default)
 dotforge profile validate desktop          # check it for mistakes
 dotforge profile show ./some/folder        # any command also takes a path
 ```
@@ -25,6 +26,11 @@ dotforge profile show ./some/folder        # any command also takes a path
 fields filled in (the rest are commented-out examples), and the
 `config/` and `assets/` folders (`wallpapers`, `icons`, `cursors`,
 `fonts`). It never overwrites an existing profile.
+
+`profile edit` opens `profile.yml` in the editor from your settings
+(`editor:` in `~/.config/dotforge/config.yml`, `nano` if not set; see
+[cli.md](cli.md#settings)). When the editor closes, DotForge checks the
+profile straight away and shows any problems.
 
 ### Profile names
 
@@ -136,6 +142,11 @@ reported instead of being silently ignored.
 - Every ID under `applications` and `rice` exists in the catalog and has
   the right category. Close misspellings get a "did you mean" tip.
 - **Warning:** the same application listed twice.
+- **Warning:** an entry in a slot it is not made for, e.g. a notification
+  daemon as the launcher. This uses the entry's capabilities (see
+  [catalog-format.md](catalog-format.md#capabilities)).
+- **Warning:** a shell or component that only works on Wayland while the
+  compositor (or desktop) only runs on X11, or the other way round.
 
 The `system` section is not checked against the catalog yet; that comes
 when drivers and audio stacks get catalog entries.

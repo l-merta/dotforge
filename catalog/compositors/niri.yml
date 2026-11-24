@@ -1,27 +1,18 @@
 id: niri
-
 name: Niri
-
 description: Scrollable-tiling Wayland compositor
-
 category: compositor
 
-platforms:
-  - linux
-
-protocols:
-  - wayland
+platforms: [linux]
+protocols: [wayland]
 
 installation:
   arch:
-    packages:
-      - niri
+    packages: [niri]
 
-capabilities:
-  - compositor
-  - window-management
-  - keybindings
-  - workspaces
+dependencies: [xdg-desktop-portal-gnome]
+
+capabilities: [compositor, window-management, keybindings, workspaces, animations]
 
 configuration:
   directory: ~/.config/niri

@@ -1,0 +1,19 @@
+id: fuzzel
+name: Fuzzel
+description: Fast application launcher for Wayland
+category: component
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [fuzzel]
+
+capabilities: [launcher]
+
+configuration:
+  directory: ~/.config/fuzzel
+
+integration:
+  themes: true

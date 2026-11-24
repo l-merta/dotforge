@@ -1,0 +1,11 @@
+id: telegram
+name: Telegram
+description: Messaging app
+category: application
+
+platforms: [linux]
+protocols: [wayland, x11]
+
+installation:
+  arch:
+    packages: [telegram-desktop]

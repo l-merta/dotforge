@@ -1,0 +1,11 @@
+id: steam
+name: Steam
+description: Valve's game store and launcher (needs the multilib repository enabled in /etc/pacman.conf)
+category: application
+
+platforms: [linux]
+protocols: [wayland, x11]
+
+installation:
+  arch:
+    packages: [steam]

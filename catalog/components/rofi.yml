@@ -1,0 +1,19 @@
+id: rofi
+name: Rofi
+description: Application launcher and window switcher
+category: component
+
+platforms: [linux]
+protocols: [wayland, x11]
+
+installation:
+  arch:
+    packages: [rofi]
+
+capabilities: [launcher]
+
+configuration:
+  directory: ~/.config/rofi
+
+integration:
+  themes: true

@@ -328,3 +328,373 @@ fn show_by_path() {
   ));
   assert_eq!(value["data"]["profile"]["name"], "Test profile");
 }
+
+// ---------- Milestone 3: catalog ----------
+
+fn write_user_entry(config: &Path, folder: &str, id: &str, contents: &str) {
+  let dir = config.join("catalog").join(folder);
+  fs::create_dir_all(&dir).unwrap();
+  fs::write(dir.join(format!("{id}.yml")), contents).unwrap();
+}
+
+#[test]
+fn builtin_catalog_validates_cleanly() {
+  let config = TempDir::new().unwrap();
+  let value = json(&dotforge(config.path(), &["--json", "catalog", "validate"]));
+
+  assert_eq!(value["ok"], true);
+  assert_eq!(value["data"]["errors"], 0);
+  assert_eq!(value["data"]["warnings"], 0);
+}
+
+#[test]
+fn repo_test_profile_now_validates() {
+  let config = TempDir::new().unwrap();
+  let repo_profile = concat!(env!("CARGO_MANIFEST_DIR"), "/profiles/test");
+  let output = dotforge(config.path(), &["profile", "validate", repo_profile]);
+
+  assert_eq!(
+    output.status.code(),
+    Some(0),
+    "{}",
+    String::from_utf8_lossy(&output.stdout)
+  );
+}
+
+#[test]
+fn deps_lists_dependencies_first() {
+  let config = TempDir::new().unwrap();
+  let value = json(&dotforge(
+    config.path(),
+    &["--json", "catalog", "deps", "hyprland"],
+  ));
+
+  let order: Vec<&str> = value["data"]["order"]
+    .as_array()
+    .unwrap()
+    .iter()
+    .map(|step| step["id"].as_str().unwrap())
+    .collect();
+  assert_eq!(
+    order,
+    [
+      "xdg-desktop-portal",
+      "xdg-desktop-portal-hyprland",
+      "hyprland"
+    ]
+  );
+}
+
+#[test]
+fn deps_shows_aur_packages_and_setup_steps() {
+  let config = TempDir::new().unwrap();
+
+  let heroic = json(&dotforge(
+    config.path(),
+    &["--json", "catalog", "deps", "heroic"],
+  ));
+  assert_eq!(
+    heroic["data"]["order"][0]["aur"][0],
+    "heroic-games-launcher-bin"
+  );
+
+  let docker = json(&dotforge(
+    config.path(),
+    &["--json", "catalog", "show", "docker"],
+  ));
+  assert_eq!(docker["data"]["setup"][0]["action"], "enable_service");
+  assert_eq!(docker["data"]["setup"][1]["group"], "docker");
+}
+
+#[test]
+fn circular_dependencies_are_caught() {
+  let config = TempDir::new().unwrap();
+  let entry = |id: &str, dep: &str| {
+    format!(
+      "id: {id}\nname: {id}\ndescription: test\ncategory: application\nplatforms: [linux]\ninstallation:\n  arch:\n    packages: [{id}]\ndependencies: [{dep}]\n"
+    )
+  };
+  write_user_entry(
+    config.path(),
+    "applications",
+    "chicken",
+    &entry("chicken", "egg"),
+  );
+  write_user_entry(
+    config.path(),
+    "applications",
+    "egg",
+    &entry("egg", "chicken"),
+  );
+
+  let validate = dotforge(config.path(), &["--json", "catalog", "validate"]);
+  assert_eq!(validate.status.code(), Some(4));
+  let message = json(&validate)["data"]["issues"][0]["message"]
+    .as_str()
+    .unwrap()
+    .to_string();
+  assert!(message.contains("circular dependency"), "{message}");
+
+  let deps = dotforge(config.path(), &["catalog", "deps", "chicken"]);
+  assert_eq!(deps.status.code(), Some(4));
+  assert!(String::from_utf8_lossy(&deps.stderr).contains("chicken → egg → chicken"));
+}
+
+#[test]
+fn free_form_commands_are_not_allowed() {
+  let config = TempDir::new().unwrap();
+  write_user_entry(
+    config.path(),
+    "applications",
+    "sneaky",
+    "id: sneaky\nname: Sneaky\ndescription: x\ncategory: application\ninstallation: {}\nsetup:\n  - action: run_command\n    command: echo hi\n",
+  );
+
+  let output = dotforge(config.path(), &["--json", "catalog", "list"]);
+  assert_eq!(output.status.code(), Some(4));
+  assert!(
+    json(&output)["error"]["message"]
+      .as_str()
+      .unwrap()
+      .contains("run_command")
+  );
+}
+
+#[test]
+fn profile_warns_about_wayland_parts_on_x11() {
+  let config = TempDir::new().unwrap();
+  write_user_entry(
+    config.path(),
+    "compositors",
+    "oldwm",
+    "id: oldwm\nname: Old WM\ndescription: X11 only\ncategory: compositor\nplatforms: [linux]\nprotocols: [x11]\ncapabilities: [compositor]\ninstallation:\n  arch:\n    packages: [oldwm]\n",
+  );
+  write_profile(
+    config.path(),
+    "retro",
+    &PROFILE.replace(
+      "compositor: hyprland",
+      "compositor: oldwm\n  components:\n    taskbar: waybar",
+    ),
+  );
+
+  let output = dotforge(config.path(), &["--json", "profile", "validate", "retro"]);
+  let value = json(&output);
+
+  assert_eq!(output.status.code(), Some(0)); // only a warning
+  assert_eq!(value["data"]["warnings"], 1);
+  assert!(
+    value["data"]["issues"][0]["message"]
+      .as_str()
+      .unwrap()
+      .contains("only works on Wayland")
+  );
+}
+
+// ---------- settings and `profile edit` ----------
+
+/// Writes a tiny "editor" script that appends `line` to the file it opens.
+fn fake_editor(dir: &Path, line: &str) -> String {
+  use std::os::unix::fs::PermissionsExt;
+
+  let script = dir.join("fake-editor.sh");
+  fs::write(&script, format!("#!/bin/sh\necho '{line}' >> \"$1\"\n")).unwrap();
+  fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+  script.display().to_string()
+}
+
+fn set_editor(config: &Path, editor: &str) {
+  fs::create_dir_all(config).unwrap();
+  fs::write(config.join("config.yml"), format!("editor: {editor}\n")).unwrap();
+}
+
+#[test]
+fn config_show_uses_nano_by_default() {
+  let config = TempDir::new().unwrap();
+  let value = json(&dotforge(config.path(), &["--json", "config", "show"]));
+
+  assert_eq!(value["data"]["file_exists"], false);
+  assert_eq!(value["data"]["settings"][0]["key"], "editor");
+  assert_eq!(value["data"]["settings"][0]["value"], "nano");
+  assert_eq!(value["data"]["settings"][0]["source"], "default");
+}
+
+#[test]
+fn config_show_reads_the_settings_file() {
+  let config = TempDir::new().unwrap();
+  set_editor(config.path(), "code --wait");
+
+  let value = json(&dotforge(config.path(), &["--json", "config", "show"]));
+  assert_eq!(value["data"]["settings"][0]["value"], "code --wait");
+  assert_eq!(value["data"]["settings"][0]["source"], "file");
+}
+
+#[test]
+fn a_typo_in_the_settings_file_is_reported() {
+  let config = TempDir::new().unwrap();
+  fs::write(config.path().join("config.yml"), "editr: vim\n").unwrap();
+
+  let output = dotforge(config.path(), &["--json", "config", "show"]);
+  assert_eq!(output.status.code(), Some(4));
+  assert!(
+    json(&output)["error"]["message"]
+      .as_str()
+      .unwrap()
+      .contains("editr")
+  );
+}
+
+#[test]
+fn profile_edit_opens_the_configured_editor_and_checks_the_result() {
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "desk", PROFILE);
+  let editor = fake_editor(config.path(), "description: edited by the fake editor");
+  set_editor(config.path(), &editor);
+
+  let output = dotforge(config.path(), &["--json", "profile", "edit", "desk"]);
+  assert_eq!(
+    output.status.code(),
+    Some(0),
+    "{}",
+    String::from_utf8_lossy(&output.stdout)
+  );
+
+  let value = json(&output);
+  assert_eq!(value["data"]["validation"]["valid"], true);
+
+  let contents = fs::read_to_string(config.path().join("profiles/desk/profile.yml")).unwrap();
+  assert!(contents.ends_with("description: edited by the fake editor\n"));
+}
+
+#[test]
+fn profile_edit_reports_a_profile_broken_by_the_edit() {
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "desk", PROFILE);
+  let editor = fake_editor(config.path(), "colour: red");
+  set_editor(config.path(), &editor);
+
+  let output = dotforge(config.path(), &["--json", "profile", "edit", "desk"]);
+  assert_eq!(output.status.code(), Some(4));
+  assert!(
+    json(&output)["error"]["message"]
+      .as_str()
+      .unwrap()
+      .contains("colour")
+  );
+}
+
+#[test]
+fn missing_editor_gives_a_hint() {
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "desk", PROFILE);
+  set_editor(config.path(), "no-such-editor-here");
+
+  let output = dotforge(config.path(), &["--json", "profile", "edit", "desk"]);
+  let value = json(&output);
+
+  assert_eq!(output.status.code(), Some(1));
+  assert_eq!(value["error"]["kind"], "editor");
+  assert!(
+    value["error"]["message"]
+      .as_str()
+      .unwrap()
+      .contains("was not found")
+  );
+  assert!(
+    value["error"]["hint"]
+      .as_str()
+      .unwrap()
+      .contains("config.yml")
+  );
+}
+
+#[test]
+fn editor_that_fails_is_reported() {
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "desk", PROFILE);
+  set_editor(config.path(), "false");
+
+  let output = dotforge(config.path(), &["profile", "edit", "desk"]);
+  assert_eq!(output.status.code(), Some(1));
+  assert!(String::from_utf8_lossy(&output.stderr).contains("exited with code 1"));
+}
+
+#[test]
+fn profile_edit_unknown_profile() {
+  let config = TempDir::new().unwrap();
+  let output = dotforge(config.path(), &["profile", "edit", "ghost"]);
+  assert_eq!(output.status.code(), Some(3));
+}
+
+/// Runs dotforge with a fake `nano` first on the PATH, so the default
+/// editor can be tested without opening a real one.
+fn dotforge_with_fake_nano(config: &Path, args: &[&str]) -> Output {
+  use std::os::unix::fs::PermissionsExt;
+
+  let bin = config.join("fake-bin");
+  fs::create_dir_all(&bin).unwrap();
+  let nano = bin.join("nano");
+  fs::write(
+    &nano,
+    "#!/bin/sh\necho \"$1\" > \"$(dirname \"$0\")/opened\"\n",
+  )
+  .unwrap();
+  fs::set_permissions(&nano, fs::Permissions::from_mode(0o755)).unwrap();
+
+  let path = format!(
+    "{}:{}",
+    bin.display(),
+    std::env::var("PATH").unwrap_or_default()
+  );
+  Command::new(env!("CARGO_BIN_EXE_dotforge"))
+    .args(args)
+    .env("DOTFORGE_CONFIG_DIR", config)
+    .env("PATH", path)
+    .current_dir(std::env::temp_dir())
+    .output()
+    .expect("failed to run dotforge")
+}
+
+#[test]
+fn profile_edit_uses_nano_by_default() {
+  let config = TempDir::new().unwrap();
+  write_profile(config.path(), "desk", PROFILE);
+
+  let output = dotforge_with_fake_nano(config.path(), &["profile", "edit", "desk"]);
+  assert_eq!(
+    output.status.code(),
+    Some(0),
+    "{}",
+    String::from_utf8_lossy(&output.stderr)
+  );
+
+  let opened = fs::read_to_string(config.path().join("fake-bin/opened")).unwrap();
+  assert!(
+    opened.trim().ends_with("profiles/desk/profile.yml"),
+    "{opened}"
+  );
+}
+
+#[test]
+fn config_edit_creates_the_file_from_the_template() {
+  let config = TempDir::new().unwrap();
+  let settings = config.path().join("config.yml");
+
+  let output = dotforge_with_fake_nano(config.path(), &["--json", "config", "edit"]);
+  assert_eq!(
+    output.status.code(),
+    Some(0),
+    "{}",
+    String::from_utf8_lossy(&output.stdout)
+  );
+  assert_eq!(json(&output)["data"]["created"], true);
+  assert!(
+    fs::read_to_string(&settings)
+      .unwrap()
+      .contains("editor: nano")
+  );
+
+  // Second time the file already exists.
+  let again = dotforge_with_fake_nano(config.path(), &["--json", "config", "edit"]);
+  assert_eq!(json(&again)["data"]["created"], false);
+}

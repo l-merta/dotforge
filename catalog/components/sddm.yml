@@ -1,0 +1,20 @@
+id: sddm
+name: SDDM
+description: Graphical login screen (display manager), the default for KDE Plasma
+category: component
+
+platforms: [linux]
+protocols: [wayland, x11]
+
+installation:
+  arch:
+    packages: [sddm]
+
+capabilities: [display-manager]
+
+integration:
+  themes: true
+
+setup:
+  - action: enable_service
+    service: sddm.service

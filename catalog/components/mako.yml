@@ -1,0 +1,19 @@
+id: mako
+name: Mako
+description: Lightweight notification daemon for Wayland
+category: component
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [mako]
+
+capabilities: [notifications]
+
+configuration:
+  directory: ~/.config/mako
+
+integration:
+  themes: true

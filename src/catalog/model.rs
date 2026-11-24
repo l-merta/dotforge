@@ -36,6 +36,11 @@ pub struct CatalogEntry {
   #[serde(default)]
   pub integration: Option<Integration>,
 
+  /// Steps needed after the packages are installed, such as enabling a
+  /// service. Only the typed actions in [`SetupAction`] are allowed.
+  #[serde(default)]
+  pub setup: Vec<SetupAction>,
+
   /// Where this entry was loaded from. Not part of the YAML file.
   #[serde(skip_deserializing, default)]
   pub source: Source,
@@ -125,7 +130,7 @@ impl fmt::Display for Platform {
   }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Protocol {
   Wayland,
@@ -148,7 +153,8 @@ impl fmt::Display for Protocol {
 /// ```yaml
 /// installation:
 ///   arch:
-///     packages: [hyprland]
+///     packages: [hyprland]          # official repositories (pacman)
+///     aur: [heroic-games-launcher-bin]  # the AUR (paru or yay)
 /// ```
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Installation {
@@ -159,11 +165,23 @@ pub struct Installation {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct PackageInstallation {
+  /// Packages from the distribution's official repositories.
   #[serde(default)]
   pub packages: Vec<String>,
+
+  /// Packages from the Arch User Repository, installed through an AUR
+  /// helper (paru or yay). Only valid for the `arch` family.
+  #[serde(default)]
+  pub aur: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+impl PackageInstallation {
+  pub fn is_empty(&self) -> bool {
+    self.packages.is_empty() && self.aur.is_empty()
+  }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum Capability {
   Compositor,
@@ -176,6 +194,10 @@ pub enum Capability {
   Panel,
   Wallpaper,
   Theme,
+  Terminal,
+  DisplayManager,
+  Portal,
+  Lockscreen,
 }
 
 impl fmt::Display for Capability {
@@ -191,16 +213,78 @@ impl fmt::Display for Capability {
       Capability::Panel => "Panel",
       Capability::Wallpaper => "Wallpaper",
       Capability::Theme => "Theme",
+      Capability::Terminal => "Terminal",
+      Capability::DisplayManager => "Display manager",
+      Capability::Portal => "Desktop portal",
+      Capability::Lockscreen => "Lock screen",
     };
 
     write!(f, "{value}")
   }
 }
 
+/// Where an entry's configuration lives on the machine.
+///
+/// The matching files in a profile are `config/<entry id>/`. From
+/// Milestone 6, DotForge links `directory` to that folder with a symlink,
+/// so the profile stays the one place to edit them.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Configuration {
+  /// Destination folder, e.g. `~/.config/hypr`. Must start with `~/` or `/`.
   pub directory: String,
+}
+
+/// A typed step that installing a package alone does not do.
+///
+/// Written in YAML like this:
+///
+/// ```yaml
+/// setup:
+///   - action: enable_service
+///     service: docker.service
+///   - action: add_user_to_group
+///     group: docker
+///   - action: set_default_shell
+///     shell: /usr/bin/zsh
+/// ```
+///
+/// These are descriptions, not shell commands: DotForge decides how to
+/// run each one and can check whether it is already done (Milestone 5).
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SetupAction {
+  /// `systemctl enable <service>` (with `--user` when `user: true`).
+  EnableService {
+    service: String,
+    #[serde(default)]
+    user: bool,
+  },
+  /// Add the current user to a group, e.g. `docker` or `input`.
+  AddUserToGroup { group: String },
+  /// Make this program the user's login shell.
+  SetDefaultShell { shell: String },
+}
+
+impl fmt::Display for SetupAction {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      SetupAction::EnableService {
+        service,
+        user: false,
+      } => {
+        write!(f, "enable the system service {service}")
+      }
+      SetupAction::EnableService {
+        service,
+        user: true,
+      } => {
+        write!(f, "enable the user service {service}")
+      }
+      SetupAction::AddUserToGroup { group } => write!(f, "add you to the '{group}' group"),
+      SetupAction::SetDefaultShell { shell } => write!(f, "make {shell} your login shell"),
+    }
+  }
 }
 
 /// Which parts of a rice this entry can take part in.

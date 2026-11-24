@@ -10,4 +10,5 @@ pub mod catalog;
 pub mod conventions;
 pub mod loader;
 pub mod model;
+pub mod resolve;
 pub mod validate;

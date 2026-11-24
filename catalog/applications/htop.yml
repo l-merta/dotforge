@@ -1,0 +1,13 @@
+id: htop
+name: htop
+description: Interactive process viewer for the terminal
+category: application
+
+platforms: [linux]
+
+installation:
+  arch:
+    packages: [htop]
+
+configuration:
+  directory: ~/.config/htop

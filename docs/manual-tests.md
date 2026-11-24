@@ -38,9 +38,9 @@ unset DOTFORGE_CONFIG_DIR
 dotforge catalog list
 ```
 
-You see `Catalog entries: 4`, then the categories. Hyprland and Niri
-are under Compositors, Noctalia under Shells, Kitty under Applications.
-Empty categories say `(none yet)`.
+You see `Catalog entries: 39`, then the five categories: Desktop
+environments (GNOME, KDE Plasma), Compositors (Hyprland, Niri, Sway),
+Shells (Noctalia), Components and Applications.
 
 ### 1.2 Filter by category
 
@@ -48,7 +48,7 @@ Empty categories say `(none yet)`.
 dotforge catalog list compositor
 ```
 
-Only Hyprland and Niri are shown.
+Only Hyprland, Niri and Sway are shown.
 
 ### 1.3 Look at one entry
 
@@ -57,8 +57,8 @@ dotforge catalog show hyprland
 ```
 
 You see Hyprland's ID, category, description, `Source: built-in
-(compositors/hyprland.yml)`, capabilities, dependencies, packages and
-config folder.
+(compositors/hyprland.yml)`, capabilities, dependencies, packages, setup
+steps and config folder.
 
 ### 1.4 A typo gets a suggestion
 
@@ -77,9 +77,8 @@ dotforge catalog validate
 echo $?
 ```
 
-You see `0 error(s), 2 warning(s)`. The warnings say that Hyprland's
-two `xdg-desktop-portal` dependencies are not catalog entries yet. The
-last line is `The catalog is valid.` and the exit code is **0**.
+You see `Checked 39 catalog entries: 0 error(s), 0 warning(s)` and
+`The catalog is valid.` The exit code is **0**.
 
 ### 1.6 JSON output
 
@@ -91,16 +90,16 @@ dotforge catalog show kitty --json
 Both print the same JSON. It starts with `"data": {` and ends with
 `"exit_code": 0` and `"ok": true`.
 
-### 1.7 Check a profile that has problems
+### 1.7 Check the example profile in the repo
 
 ```sh
 dotforge profile validate ./profiles/test
 echo $?
 ```
 
-You see `17 error(s)`, one line for each app or component that isn't in
-the catalog yet (`'steam' is not in the catalog`, ...). The exit code is
-**4** (invalid). This is expected for now.
+You see `0 error(s), 0 warning(s)` and `The profile is valid.` The exit
+code is **0**. (Before Milestone 3 this showed 17 errors, because apps
+like Steam weren't in the catalog yet.)
 
 ### 1.8 Errors point to the exact line and field
 
@@ -154,6 +153,36 @@ echo $?
 
 You see `error: unrecognized subcommand 'fly'`. The exit code is **2**
 (wrong command line).
+
+### 1.12 DotForge's own settings
+
+```sh
+dotforge config show
+```
+
+You see `Settings file: /tmp/dotforge-test/config.yml (not created yet,
+using defaults)` and `editor: nano  (default)`.
+
+```sh
+dotforge config edit
+```
+
+Nano opens a new settings file with `editor: nano` in it. Change it to an
+editor you like (for example `editor: micro`, or `editor: code --wait`
+for VS Code), save (Ctrl+O, Enter) and quit (Ctrl+X). You see `Saved
+.../config.yml (new file). The settings are valid.` Run `dotforge config
+show` again: the editor now shows your choice, without `(default)`.
+
+Now make a typo on purpose:
+
+```sh
+echo "editr: vim" > $DOTFORGE_CONFIG_DIR/config.yml
+dotforge config show
+echo $?
+```
+
+You see an error about `editr` (an unknown field) and exit code **4**.
+Fix it with `echo "editor: nano" > $DOTFORGE_CONFIG_DIR/config.yml`.
 
 ---
 
@@ -302,3 +331,141 @@ echo $?
 
 You see `'profile apply' is not implemented yet (planned for Milestone 5)`.
 The exit code is **5**.
+
+### 2.13 Edit a profile in your editor
+
+```sh
+dotforge profile edit desktop
+```
+
+Your editor (nano unless you changed it in 1.12) opens the desktop
+profile. Change the description, save and quit. You see `Saved ...` and
+then the same check as `profile validate`, ending with `The profile is
+valid.`
+
+Now try an editor that doesn't exist:
+
+```sh
+echo "editor: no-such-editor" > $DOTFORGE_CONFIG_DIR/config.yml
+dotforge profile edit desktop
+echo $?
+```
+
+You see `could not open the editor 'no-such-editor': the program
+'no-such-editor' was not found`, with a hint pointing at `config.yml`.
+The exit code is **1**. Put it back with
+`echo "editor: nano" > $DOTFORGE_CONFIG_DIR/config.yml`.
+
+---
+
+## Milestone 3: a bigger catalog, AUR, setup actions, dependencies
+
+### 3.1 The catalog has grown
+
+```sh
+dotforge catalog list
+dotforge catalog validate
+```
+
+The list shows 39 entries, and validate shows `0 error(s), 0 warning(s)`.
+
+### 3.2 AUR packages are marked
+
+```sh
+dotforge catalog show heroic
+```
+
+Under `Installation:` you see `heroic-games-launcher-bin  (AUR)`. That
+means it will come from the AUR through paru or yay, not from pacman.
+`dotforge catalog show steam` shows a normal package (no `(AUR)`).
+
+### 3.3 Setup steps
+
+```sh
+dotforge catalog show docker
+```
+
+Under `Setup steps:` you see `enable the system service docker.service`
+and `add you to the 'docker' group`. These are the extra things
+installing Docker needs. Try `dotforge catalog show zsh` too: it says
+`make /usr/bin/zsh your login shell`.
+
+### 3.4 Dependencies in install order
+
+```sh
+dotforge catalog deps hyprland
+```
+
+You see 3 numbered steps: `xdg-desktop-portal`, then
+`xdg-desktop-portal-hyprland`, then `hyprland`. Dependencies always come
+before the thing that needs them. Try `dotforge catalog deps kde-plasma`:
+it installs the SDDM login screen first and enables its service.
+
+### 3.5 A typo in `deps`
+
+```sh
+dotforge catalog deps hyprlnd
+echo $?
+```
+
+You see `did you mean 'hyprland'?` and the exit code is **3**.
+
+### 3.6 Circular dependencies are caught
+
+Make two entries that need each other:
+
+```sh
+mkdir -p $DOTFORGE_CONFIG_DIR/catalog/applications
+printf 'id: chicken\nname: Chicken\ndescription: Came first?\ncategory: application\nplatforms: [linux]\ninstallation:\n  arch:\n    packages: [chicken]\ndependencies: [egg]\n' > $DOTFORGE_CONFIG_DIR/catalog/applications/chicken.yml
+printf 'id: egg\nname: Egg\ndescription: Or did I?\ncategory: application\nplatforms: [linux]\ninstallation:\n  arch:\n    packages: [egg]\ndependencies: [chicken]\n' > $DOTFORGE_CONFIG_DIR/catalog/applications/egg.yml
+dotforge catalog validate
+echo $?
+dotforge catalog deps chicken
+```
+
+Validate shows `error: chicken: circular dependency: chicken → egg →
+chicken` and exit code **4**. `deps` shows the same circle. Clean up:
+
+```sh
+rm -r $DOTFORGE_CONFIG_DIR/catalog
+```
+
+### 3.7 Shell commands are not allowed in the catalog
+
+```sh
+mkdir -p $DOTFORGE_CONFIG_DIR/catalog/applications
+printf 'id: sneaky\nname: Sneaky\ndescription: Tries to run a command\ncategory: application\nplatforms: [linux]\ninstallation:\n  arch:\n    packages: [sneaky]\nsetup:\n  - action: run_command\n    command: echo hi\n' > $DOTFORGE_CONFIG_DIR/catalog/applications/sneaky.yml
+dotforge catalog list
+echo $?
+```
+
+You see an error that points at line 10, field `setup[0].action`:
+`unknown variant `run_command`, expected one of `enable_service`,
+`add_user_to_group`, `set_default_shell``. The exit code is **4**. Only
+the three typed actions are allowed. Clean up with
+`rm -r $DOTFORGE_CONFIG_DIR/catalog`.
+
+### 3.8 The wrong tool for a job gets a warning
+
+```sh
+dotforge profile create rice-test > /dev/null
+F=$DOTFORGE_CONFIG_DIR/profiles/rice-test/profile.yml
+sed -i '/^# rice:/,$ s/^# //' $F
+sed -i 's/notifications: noctalia/launcher: dunst/' $F
+dotforge profile validate rice-test
+echo $?
+```
+
+You see `warning: rice.components.launcher: 'dunst' does not list the
+'launcher' capability`. Dunst shows notifications, it isn't an app
+launcher. It's only a warning, so the profile still counts as valid and
+the exit code is **0**.
+
+### 3.9 Dependencies as JSON
+
+```sh
+dotforge --json catalog deps docker
+```
+
+You get JSON with an `order` list. Each step has `id`, `packages`, `aur`
+and `setup` (with `"action": "enable_service"` and so on).

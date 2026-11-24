@@ -1,0 +1,16 @@
+id: btop
+name: btop
+description: Resource monitor for the terminal
+category: application
+
+platforms: [linux]
+
+installation:
+  arch:
+    packages: [btop]
+
+configuration:
+  directory: ~/.config/btop
+
+integration:
+  themes: true

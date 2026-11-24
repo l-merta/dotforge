@@ -1,32 +1,18 @@
 id: hyprland
-
 name: Hyprland
-
 description: Dynamic tiling Wayland compositor
-
 category: compositor
 
-platforms:
-  - linux
-
-protocols:
-  - wayland
+platforms: [linux]
+protocols: [wayland]
 
 installation:
   arch:
-    packages:
-      - hyprland
+    packages: [hyprland]
 
-dependencies:
-  - xdg-desktop-portal
-  - xdg-desktop-portal-hyprland
+dependencies: [xdg-desktop-portal-hyprland]
 
-capabilities:
-  - compositor
-  - window-management
-  - keybindings
-  - workspaces
-  - animations
+capabilities: [compositor, window-management, keybindings, workspaces, animations]
 
 configuration:
   directory: ~/.config/hypr

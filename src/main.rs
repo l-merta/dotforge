@@ -4,11 +4,13 @@ use cli::{Cli, Commands};
 
 mod catalog;
 mod cli;
+mod editor;
 mod error;
 mod exit_code;
 mod output;
 mod paths;
 mod profile;
+mod settings;
 mod validation;
 
 fn main() -> std::process::ExitCode {
@@ -18,6 +20,7 @@ fn main() -> std::process::ExitCode {
   let result = match cli.command {
     Commands::Catalog { command } => cli::catalog::handle(command),
     Commands::Profile { command } => cli::profile::handle(command),
+    Commands::Config { command } => cli::config::handle(command),
   };
 
   // 2. Print the result as text or JSON and exit with the matching code.

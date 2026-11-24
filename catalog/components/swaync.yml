@@ -1,0 +1,19 @@
+id: swaync
+name: SwayNotificationCenter
+description: Notification daemon with a notification centre panel
+category: component
+
+platforms: [linux]
+protocols: [wayland]
+
+installation:
+  arch:
+    packages: [swaync]
+
+capabilities: [notifications]
+
+configuration:
+  directory: ~/.config/swaync
+
+integration:
+  themes: true

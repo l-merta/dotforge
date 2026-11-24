@@ -61,6 +61,10 @@ pub enum AppError {
     hint: Option<String>,
   },
 
+  /// The editor could not be started or reported a failure.
+  #[error("could not open the editor '{editor}': {reason}")]
+  Editor { editor: String, reason: String },
+
   /// DotForge could not work out where the user's config folder is.
   #[error("could not find your home folder (neither $HOME nor $XDG_CONFIG_HOME is set)")]
   NoConfigDir,
@@ -100,7 +104,10 @@ impl AppError {
   pub fn exit_code(&self) -> ExitCode {
     match self {
       AppError::NotFound { .. } => ExitCode::NotFound,
-      AppError::Io { .. } | AppError::Write { .. } | AppError::NoConfigDir => ExitCode::Failure,
+      AppError::Io { .. }
+      | AppError::Write { .. }
+      | AppError::Editor { .. }
+      | AppError::NoConfigDir => ExitCode::Failure,
       AppError::AlreadyExists { .. } => ExitCode::AlreadyExists,
       AppError::Parse { .. } | AppError::Invalid { .. } => ExitCode::Invalid,
       AppError::NotImplemented { .. } => ExitCode::NotImplemented,
@@ -116,6 +123,7 @@ impl AppError {
       AppError::Parse { .. } => "parse",
       AppError::Invalid { .. } => "invalid",
       AppError::NoConfigDir => "no_config_dir",
+      AppError::Editor { .. } => "editor",
       AppError::NotImplemented { .. } => "not_implemented",
     }
   }
@@ -123,6 +131,9 @@ impl AppError {
   /// An optional tip telling the user what they can do next.
   pub fn hint(&self) -> Option<&str> {
     match self {
+      AppError::Editor { .. } => Some(
+        "set the editor in ~/.config/dotforge/config.yml, e.g. 'editor: nano' (see 'dotforge config show')",
+      ),
       AppError::NotFound { hint, .. }
       | AppError::Invalid { hint, .. }
       | AppError::AlreadyExists { hint, .. } => hint.as_deref(),
@@ -163,7 +174,7 @@ impl AppError {
 /// the line and the field that caused it.
 pub fn parse_error(file: &str, error: serde_path_to_error::Error<serde_yaml::Error>) -> AppError {
   let path = error.path().to_string();
-  let field = if path == "." || path.is_empty() {
+  let field = if path == "." || path == "?" || path.is_empty() {
     None
   } else {
     Some(path)

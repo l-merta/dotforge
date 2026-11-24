@@ -1,0 +1,19 @@
+id: dunst
+name: Dunst
+description: Lightweight notification daemon
+category: component
+
+platforms: [linux]
+protocols: [wayland, x11]
+
+installation:
+  arch:
+    packages: [dunst]
+
+capabilities: [notifications]
+
+configuration:
+  directory: ~/.config/dunst
+
+integration:
+  themes: true

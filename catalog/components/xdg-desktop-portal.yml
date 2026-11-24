@@ -1,0 +1,12 @@
+id: xdg-desktop-portal
+name: XDG Desktop Portal
+description: Lets apps open file pickers, share the screen and more on Wayland
+category: component
+
+platforms: [linux]
+
+installation:
+  arch:
+    packages: [xdg-desktop-portal]
+
+capabilities: [portal]

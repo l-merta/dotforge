@@ -4,6 +4,7 @@ use clap::Subcommand;
 use serde::Serialize;
 
 use crate::catalog::catalog::Catalog;
+use crate::editor;
 use crate::error::AppError;
 use crate::exit_code::ExitCode;
 use crate::output::{Render, Report};
@@ -12,6 +13,7 @@ use crate::profile::discovery::{self, Discovery, Status};
 use crate::profile::model::{DeviceType, Profile};
 use crate::profile::template::{self, NewProfile};
 use crate::profile::{loader, validate};
+use crate::settings;
 use crate::validation::{Issue, Severity, count, render_issues};
 
 #[derive(Subcommand, Debug)]
@@ -41,6 +43,12 @@ pub enum ProfileCommands {
     /// What kind of machine this profile is for
     #[arg(long, value_enum, default_value = "desktop")]
     device: DeviceType,
+  },
+
+  /// Open a profile in your editor (set it with 'dotforge config edit')
+  Edit {
+    /// A profile name, or a path to a profile folder or profile.yml
+    profile: String,
   },
 
   /// Check a profile for mistakes
@@ -76,6 +84,8 @@ pub fn handle(command: ProfileCommands) -> Result<Report, AppError> {
       description: description.as_deref(),
       device_type: device,
     }),
+
+    ProfileCommands::Edit { profile } => edit(&profile),
 
     ProfileCommands::Validate { profile } => validate_profile(&profile),
 
@@ -249,6 +259,43 @@ impl Render for CreatedProfile {
   }
 }
 
+// ---------- edit ----------
+
+#[derive(Serialize)]
+struct EditedProfile {
+  file: String,
+  editor: String,
+  /// The check that runs right after the editor closes.
+  validation: ProfileValidation,
+}
+
+fn edit(name_or_path: &str) -> Result<Report, AppError> {
+  let file = loader::resolve(name_or_path, &paths::profiles_dir()?)?;
+  let editor_command = settings::load()?.editor().to_string();
+
+  editor::open(&editor_command, &file)?;
+
+  // Check the profile straight away, so mistakes show up now.
+  let validation = check(&file)?;
+
+  Ok(Report::new(&EditedProfile {
+    file: file.display().to_string(),
+    editor: editor_command,
+    validation,
+  }))
+}
+
+impl Render for EditedProfile {
+  fn render_text(&self) -> String {
+    format!(
+      "Saved {}.
+{}",
+      self.file,
+      self.validation.render_text()
+    )
+  }
+}
+
 // ---------- validate ----------
 
 #[derive(Serialize)]
@@ -263,7 +310,19 @@ pub struct ProfileValidation {
 
 fn validate_profile(name_or_path: &str) -> Result<Report, AppError> {
   let file = loader::resolve(name_or_path, &paths::profiles_dir()?)?;
-  let profile = loader::load(&file)?;
+  let result = check(&file)?;
+
+  let exit_code = if result.valid {
+    ExitCode::Success
+  } else {
+    ExitCode::Invalid
+  };
+
+  Ok(Report::new(&result).with_exit_code(exit_code))
+}
+
+fn check(file: &std::path::Path) -> Result<ProfileValidation, AppError> {
+  let profile = loader::load(file)?;
   let catalog = Catalog::load()?;
 
   let issues = validate::validate(&profile, &catalog);
@@ -278,13 +337,7 @@ fn validate_profile(name_or_path: &str) -> Result<Report, AppError> {
     issues,
   };
 
-  let exit_code = if result.valid {
-    ExitCode::Success
-  } else {
-    ExitCode::Invalid
-  };
-
-  Ok(Report::new(&result).with_exit_code(exit_code))
+  Ok(result)
 }
 
 impl Render for ProfileValidation {

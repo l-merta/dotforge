@@ -1,6 +1,7 @@
 use clap::{Parser, Subcommand};
 
 pub mod catalog;
+pub mod config;
 pub mod profile;
 
 #[derive(Parser, Debug)]
@@ -28,5 +29,11 @@ pub enum Commands {
   Profile {
     #[command(subcommand)]
     command: profile::ProfileCommands,
+  },
+
+  /// Show or change DotForge's own settings
+  Config {
+    #[command(subcommand)]
+    command: config::ConfigCommands,
   },
 }
