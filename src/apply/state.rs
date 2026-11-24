@@ -28,6 +28,10 @@ pub struct ProfileState {
   /// Keyed by catalog ID.
   #[serde(default)]
   pub entries: BTreeMap<String, ManagedEntry>,
+  /// Custom scripts that ran successfully: path -> SHA-256 of the contents
+  /// that ran. A script runs again only when its contents change.
+  #[serde(default)]
+  pub scripts: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

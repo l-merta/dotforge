@@ -21,7 +21,7 @@ pub enum StepStatus {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct StepResult {
-  /// `install`, `aur`, `setup`, `remove`, `ignore` or `keep`.
+  /// `install`, `aur`, `setup`, `remove`, `ignore`, `keep` or `script`.
   pub kind: &'static str,
   pub description: String,
   pub command: Option<String>,
@@ -53,6 +53,7 @@ pub fn execute(
   plan: &Plan,
   comparison: &Comparison,
   choices: &BTreeMap<String, DroppedChoice>,
+  approved_scripts: &BTreeSet<String>,
   runner: &mut dyn Runner,
   ctx: &Context,
   state: &mut ProfileState,
@@ -214,7 +215,56 @@ pub fn execute(
     steps.push(result);
   }
 
-  // 5. Remember what DotForge now manages for this profile.
+  // 5. Your own scripts, last, and only the ones you said yes to.
+  let earlier_failure = steps.iter().any(|s| s.status == StepStatus::Failed);
+  for script in plan.scripts.iter().filter(|s| s.wants_to_run()) {
+    let Some(command) = &script.command else {
+      continue;
+    };
+    let description = format!("run your script {} ({})", script.path, script.status);
+
+    let skip = if earlier_failure {
+      Some("an earlier step failed, so your scripts were not run")
+    } else if !approved_scripts.contains(&script.path) {
+      Some("you didn't confirm it; it will be asked again next time")
+    } else {
+      None
+    };
+    if let Some(reason) = skip {
+      steps.push(StepResult {
+        kind: "script",
+        description,
+        command: Some(command.to_string()),
+        status: StepStatus::Skipped,
+        detail: Some(reason.into()),
+      });
+      continue;
+    }
+
+    let outcome = runner.run(command);
+    if outcome.success {
+      state
+        .scripts
+        .insert(script.path.clone(), script.sha256.clone());
+    }
+    steps.push(StepResult {
+      kind: "script",
+      description,
+      command: Some(command.to_string()),
+      status: if outcome.success {
+        StepStatus::Ok
+      } else {
+        StepStatus::Failed
+      },
+      detail: (!outcome.success).then(|| failure_detail(&outcome)),
+    });
+  }
+  // Scripts taken out of the profile are forgotten.
+  state
+    .scripts
+    .retain(|path, _| plan.scripts.iter().any(|s| &s.path == path));
+
+  // 6. Remember what DotForge now manages for this profile.
   for entry in &comparison.entries {
     if failed_entries.contains(&entry.id) || entry.reason.is_some() {
       continue;

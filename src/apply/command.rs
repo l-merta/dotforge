@@ -12,6 +12,9 @@ pub struct CommandSpec {
   /// Run through `sudo`, because it changes the system. Only these steps
   /// get administrator rights; DotForge itself never runs as root.
   pub sudo: bool,
+  /// The folder to run in (the current folder if not set).
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub cwd: Option<String>,
 }
 
 impl CommandSpec {
@@ -43,7 +46,13 @@ impl CommandSpec {
       program: program.to_string(),
       args: all,
       sudo,
+      cwd: None,
     }
+  }
+
+  pub fn in_dir(mut self, dir: &str) -> Self {
+    self.cwd = Some(dir.to_string());
+    self
   }
 
   /// The program and arguments actually executed (`sudo` first if needed).

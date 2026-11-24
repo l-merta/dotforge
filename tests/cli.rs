@@ -1260,3 +1260,145 @@ fn unsafe_is_root() -> bool {
     .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
     .unwrap_or(false)
 }
+
+// ---------- Custom scripts ----------
+
+impl ApplyEnv {
+  fn profile_with_script(&self, script: &str) {
+    write_profile(
+      self.config.path(),
+      "box",
+      "format_version: 1\nname: Box\ndevice:\n  type: desktop\n  os:\n    family: arch\n    distribution: arch\napplications:\n  utilities: [git]\nscripts: [scripts/hello.sh]\n",
+    );
+    let dir = self.config.path().join("profiles/box/scripts");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("hello.sh"), script).unwrap();
+  }
+
+  fn marker(&self) -> std::path::PathBuf {
+    self.system.path().join("script-ran")
+  }
+
+  fn script_runs(&self) -> usize {
+    fs::read_to_string(self.marker())
+      .unwrap_or_default()
+      .lines()
+      .count()
+  }
+}
+
+fn hello_script(env: &ApplyEnv, version: &str) -> String {
+  format!(
+    "#!/bin/bash\n# {version}\npwd >> '{}'\n",
+    env.marker().display()
+  )
+}
+
+#[test]
+fn scripts_are_shown_in_a_dry_run_but_never_run() {
+  let env = ApplyEnv::new(&["git"]);
+  env.profile_with_script(&hello_script(&env, "v1"));
+
+  let output = env.run(&["profile", "apply", "box", "--dry-run"], "y\n");
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert_eq!(output.status.code(), Some(0), "{stdout}");
+  assert!(stdout.contains("Your own scripts"), "{stdout}");
+  assert!(stdout.contains("scripts/hello.sh: new"), "{stdout}");
+  assert_eq!(env.script_runs(), 0);
+}
+
+#[test]
+fn yes_does_not_approve_scripts() {
+  let env = ApplyEnv::new(&["git"]);
+  env.profile_with_script(&hello_script(&env, "v1"));
+
+  // --yes, and no answer on stdin: the script is skipped.
+  let output = env.run(&["--json", "profile", "apply", "box", "--yes"], "");
+  assert_eq!(output.status.code(), Some(0));
+  let steps = json(&output)["data"]["report"]["steps"].clone();
+  assert_eq!(steps[0]["kind"], "script");
+  assert_eq!(steps[0]["status"], "skipped");
+  assert_eq!(env.script_runs(), 0);
+}
+
+#[test]
+fn an_approved_script_runs_once_from_the_profile_folder_and_again_when_changed() {
+  let env = ApplyEnv::new(&["git"]);
+  env.profile_with_script(&hello_script(&env, "v1"));
+
+  let output = env.run(&["profile", "apply", "box"], "y\n");
+  let stderr = String::from_utf8_lossy(&output.stderr);
+  assert_eq!(output.status.code(), Some(0), "{stderr}");
+  assert!(
+    stderr.contains("Run your script scripts/hello.sh"),
+    "{stderr}"
+  );
+  assert_eq!(env.script_runs(), 1);
+  let ran_in = fs::read_to_string(env.marker()).unwrap();
+  assert!(ran_in.trim().ends_with("profiles/box"), "{ran_in}");
+
+  // A relative path to the profile works too (the script gets a full path).
+  env.profile_with_script(&hello_script(&env, "v1b"));
+  let output = Command::new(env!("CARGO_BIN_EXE_dotforge"))
+    .args(["profile", "apply", "./box", "--dry-run"])
+    .current_dir(env.config.path().join("profiles"))
+    .env("DOTFORGE_CONFIG_DIR", env.config.path())
+    .env("DOTFORGE_SYSTEM_ROOT", env.system.path())
+    .env("DOTFORGE_STATE_DIR", env.state.path())
+    .env("DOTFORGE_ALLOW_ROOT", "1")
+    .env("USER", "tester")
+    .output()
+    .unwrap();
+  let plan = String::from_utf8_lossy(&output.stdout);
+  assert!(plan.contains("scripts/hello.sh: changed"), "{plan}");
+  env.profile_with_script(&hello_script(&env, "v1"));
+
+  // Same contents: not run, not asked.
+  let output = env.run(&["--json", "profile", "apply", "box"], "");
+  assert_eq!(json(&output)["data"]["result"], "nothing_to_do");
+  assert_eq!(env.script_runs(), 1);
+
+  // Changed contents: asked again.
+  env.profile_with_script(&hello_script(&env, "v2"));
+  let output = env.run(&["profile", "apply", "box", "--dry-run"], "");
+  assert!(String::from_utf8_lossy(&output.stdout).contains("scripts/hello.sh: changed"));
+  env.run(&["profile", "apply", "box"], "y\n");
+  assert_eq!(env.script_runs(), 2);
+}
+
+#[test]
+fn a_failing_script_fails_the_apply_and_is_retried() {
+  let env = ApplyEnv::new(&["git"]);
+  env.profile_with_script("#!/bin/bash\necho broken >&2\nexit 3\n");
+
+  let output = env.run(&["profile", "apply", "box"], "y\n");
+  assert_eq!(output.status.code(), Some(1));
+
+  // It didn't succeed, so the next dry run still wants to run it.
+  let output = env.run(&["profile", "apply", "box", "--dry-run"], "");
+  assert!(String::from_utf8_lossy(&output.stdout).contains("scripts/hello.sh: new"));
+}
+
+#[test]
+fn scripts_outside_the_profile_folder_are_refused() {
+  let env = ApplyEnv::new(&[]);
+  write_profile(
+    env.config.path(),
+    "box",
+    "format_version: 1\nname: Box\ndevice:\n  type: desktop\n  os:\n    family: arch\n    distribution: arch\nscripts: [../evil.sh, /etc/x.sh, missing.sh]\n",
+  );
+
+  let output = env.run(&["--json", "profile", "validate", "box"], "");
+  assert_eq!(output.status.code(), Some(4));
+  let text = output_text(&output);
+  assert!(text.contains("outside the profile folder"), "{text}");
+  assert!(text.contains("relative to the profile folder"), "{text}");
+  assert!(text.contains("does not exist"), "{text}");
+
+  let output = env.run(&["profile", "apply", "box", "--yes"], "");
+  assert_eq!(output.status.code(), Some(4));
+}
+
+fn output_text(output: &Output) -> String {
+  String::from_utf8_lossy(&output.stdout).to_string()
+}

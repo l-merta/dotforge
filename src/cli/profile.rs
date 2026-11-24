@@ -465,7 +465,10 @@ fn check(file: &std::path::Path) -> Result<ProfileValidation, AppError> {
   let profile = loader::load(file)?;
   let catalog = Catalog::load()?;
 
-  let issues = validate::validate(&profile, &catalog);
+  let mut issues = validate::validate(&profile, &catalog);
+  if let Some(dir) = file.parent() {
+    issues.extend(validate::validate_scripts(&profile, dir));
+  }
   let errors = count(&issues, Severity::Error);
 
   let result = ProfileValidation {

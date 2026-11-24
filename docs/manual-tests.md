@@ -763,4 +763,51 @@ last lines of pacman's error and the log path, and the exit code is **1**.
 (Your own catalog entry replaces the built-in one, which is how this
 test breaks it.)
 
+### 5.11 Your own script
+
+Add a script to the profile:
+
+```sh
+mkdir -p ~/.config/dotforge/profiles/vm/scripts
+cat > ~/.config/dotforge/profiles/vm/scripts/hello.sh <<'SH'
+#!/bin/bash
+echo "hello from $(whoami) in $(pwd)" > ~/hello.txt
+SH
+echo 'scripts: [scripts/hello.sh]' >> ~/.config/dotforge/profiles/vm/profile.yml
+dotforge profile apply vm --dry-run
+```
+
+The plan has a part `Your own scripts` with
+`scripts/hello.sh: new, 2 line(s): you'll be asked before it runs`, and
+`~/hello.txt` does not exist yet.
+
+Now try `--yes`:
+
+```sh
+dotforge profile apply vm --yes
+```
+
+It still asks `Run your script scripts/hello.sh ...? [y/N]`, because
+`--yes` never answers for scripts. Press Enter (no): the result shows it
+as `[skipped]`. Run it again and type `y`:
+
+```sh
+dotforge profile apply vm
+cat ~/hello.txt
+```
+
+You see `hello from arch in /home/arch/.config/dotforge/profiles/vm`.
+Run apply once more: `Nothing to do`, the script doesn't run again. Edit
+the script (change the text), and apply shows it as `changed` and asks
+again.
+
+Last, a script outside the profile folder is refused:
+
+```sh
+sed -i 's#scripts/hello.sh#../hello.sh#' ~/.config/dotforge/profiles/vm/profile.yml
+dotforge profile validate vm
+```
+
+You see an error that `'../hello.sh' points outside the profile folder`.
+
 When you're done, revert the VM to `clean-baseline` again.

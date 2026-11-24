@@ -72,6 +72,44 @@ profile and apply again, DotForge notices it and asks:
 `--yes` always chooses **keep**: DotForge never removes anything without
 you saying so.
 
+## Custom scripts
+
+Sometimes you need a step DotForge has no catalog entry or setup action
+for yet. For that, a profile can list its own scripts, kept in the
+profile folder:
+
+```
+profiles/desktop/
+├── profile.yml
+└── scripts/
+    └── tweaks.sh
+```
+
+```yaml
+scripts: [scripts/tweaks.sh]
+```
+
+Scripts are an **escape hatch**, and DotForge treats them as unsafe,
+because it can't know what they do, check them or undo them:
+
+- They are always listed in the plan under **Your own scripts**.
+- `--dry-run` only shows them. It never runs them.
+- Before each script runs, DotForge asks
+  `Run your script scripts/tweaks.sh (new, 12 line(s))? ... [y/N]`.
+  This question is asked **even with `--yes`**; with no answer (for
+  example in a script or CI) the answer is no and the script is skipped.
+- A script runs with `bash`, as you (not root), from the profile folder,
+  after everything else. If an earlier step failed, scripts are skipped.
+- A script that ran successfully runs again only when you **change** it
+  (DotForge remembers a fingerprint of its contents). A script that failed
+  or that you said no to is asked about again next time.
+- Scripts must live inside the profile folder, so a profile stays
+  self-contained. `profile validate` reports paths outside it and missing
+  files.
+
+Scripts don't replace setup actions. If you find yourself writing the same
+kind of script often, it should become a catalog entry or a setup action.
+
 ## Logs
 
 Every run that changes something writes a log file to
@@ -92,6 +130,9 @@ dotforge --json profile apply desktop --yes
 | `dry_run` | `--dry-run` was used; `data.plan` is the plan. |
 | `nothing_to_do` | The machine already matched. |
 | `applied` | Changes were made; `data.report` lists every step with `status` `ok`, `failed` or `skipped`. |
+
+`data.plan.scripts` lists each script with `status` `new`, `changed` or
+`unchanged`.
 | `cancelled` | You answered no (exit code 7). |
 
 Exit codes: 0 everything worked, 1 at least one step failed, 4 the profile

@@ -31,6 +31,11 @@ pub struct Profile {
 
   #[serde(default)]
   pub rice: Rice,
+
+  /// Your own scripts, relative to the profile folder. An escape hatch for
+  /// things the catalog can't do yet: always shown and confirmed one by one.
+  #[serde(default)]
+  pub scripts: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -1,6 +1,6 @@
 //! `dotforge profile apply`: make this machine match a profile.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
@@ -40,7 +40,13 @@ pub fn apply(name_or_path: &str, options: Options) -> Result<Report, AppError> {
   let profile = loader::load(&file)?;
   let catalog = Catalog::load()?;
 
-  let issues = validate::validate(&profile, &catalog);
+  // Absolute, so scripts get a full path even for `apply ./my-profile`.
+  let profile_dir = file
+    .parent()
+    .map(|dir| std::fs::canonicalize(dir).unwrap_or(dir.to_path_buf()))
+    .unwrap_or_default();
+  let mut issues = validate::validate(&profile, &catalog);
+  issues.extend(validate::validate_scripts(&profile, &profile_dir));
   let errors = count(&issues, Severity::Error);
   if errors > 0 {
     return Err(AppError::Invalid {
@@ -80,7 +86,8 @@ pub fn apply(name_or_path: &str, options: Options) -> Result<Report, AppError> {
   let state_dir = paths::state_dir()?;
   let mut saved = state::load(&state_dir)?;
   let previous = saved.profiles.get(&file_key);
-  let plan = plan::build(&comparison, &host, &ctx, previous);
+  let mut plan = plan::build(&comparison, &host, &ctx, previous);
+  plan::add_scripts(&mut plan, &profile_dir, &profile.scripts, previous);
 
   if options.dry_run {
     return Ok(Report::new(&Outcome {
@@ -98,7 +105,12 @@ pub fn apply(name_or_path: &str, options: Options) -> Result<Report, AppError> {
   };
 
   let mut choices = BTreeMap::new();
-  if plan.has_changes() || plan.dropped.iter().any(|d| !d.still_installed.is_empty()) {
+  let mut approved_scripts = BTreeSet::new();
+  let scripts_to_run: Vec<_> = plan.scripts.iter().filter(|s| s.wants_to_run()).collect();
+  if plan.has_changes()
+    || plan.dropped.iter().any(|d| !d.still_installed.is_empty())
+    || !scripts_to_run.is_empty()
+  {
     eprint!("{}", plan.render_text());
 
     if plan.has_changes() && !prompter.confirm("\nApply these changes?") {
@@ -124,6 +136,19 @@ pub fn apply(name_or_path: &str, options: Options) -> Result<Report, AppError> {
       ));
       choices.insert(dropped.id.clone(), choice);
     }
+
+    // Custom scripts are always asked about one by one, even with --yes:
+    // DotForge can't check what they do. No answer means "no".
+    let mut script_prompter = StdinPrompter;
+    for script in &scripts_to_run {
+      let question = format!(
+        "\nRun your script {} ({}, {} line(s))? DotForge can't check or undo what it does.",
+        script.path, script.status, script.lines
+      );
+      if script_prompter.confirm(&question) {
+        approved_scripts.insert(script.path.clone());
+      }
+    }
   }
 
   let mut runner = RealRunner::new(&state_dir, true);
@@ -132,6 +157,7 @@ pub fn apply(name_or_path: &str, options: Options) -> Result<Report, AppError> {
     &plan,
     &comparison,
     &choices,
+    &approved_scripts,
     &mut runner,
     &ctx,
     profile_state,
@@ -236,6 +262,20 @@ impl Render for Plan {
             None => "\n    (its packages are still needed by the profile, so nothing would be uninstalled)".into(),
           }
         ));
+      }
+    }
+
+    if !self.scripts.is_empty() {
+      text.push_str("\n  Your own scripts (custom, DotForge can't check or undo them):\n");
+      for script in &self.scripts {
+        let status = match script.status {
+          "unchanged" => "already ran, unchanged: skipped".to_string(),
+          status => format!(
+            "{status}, {} line(s): you'll be asked before it runs",
+            script.lines
+          ),
+        };
+        text.push_str(&format!("    - {}: {status}\n", script.path));
       }
     }
 

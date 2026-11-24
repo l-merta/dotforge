@@ -56,7 +56,19 @@ echo r | as_tester dotforge profile apply ci
 not_installed htop
 pacman -Q fastfetch zsh
 
-step "6. Running as root is refused"
+step "6. A custom script runs only after its own yes"
+as_tester mkdir -p /home/tester/.config/dotforge/profiles/ci/scripts
+as_tester tee /home/tester/.config/dotforge/profiles/ci/scripts/hello.sh > /dev/null <<'SH'
+#!/bin/bash
+echo "hello from $(whoami)" > ~/script-ran
+SH
+echo 'scripts: [scripts/hello.sh]' | as_tester tee -a /home/tester/.config/dotforge/profiles/ci/profile.yml > /dev/null
+as_tester dotforge profile apply ci --yes < /dev/null   # --yes doesn't approve scripts
+[ ! -e /home/tester/script-ran ]
+echo y | as_tester dotforge profile apply ci
+grep -q "hello from tester" /home/tester/script-ran
+
+step "7. Running as root is refused"
 set +e
 dotforge profile apply ci --yes
 code=$?

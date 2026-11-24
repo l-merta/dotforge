@@ -26,7 +26,27 @@ pub struct Plan {
   /// Entries DotForge managed for this profile that the profile no longer
   /// has.
   pub dropped: Vec<DroppedEntry>,
+  /// The profile's own scripts, in profile order.
+  pub scripts: Vec<ScriptStep>,
   pub notes: Vec<Issue>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ScriptStep {
+  /// As written in the profile, e.g. `scripts/tweaks.sh`.
+  pub path: String,
+  /// `new`, `changed` or `unchanged` (already ran with these contents).
+  pub status: &'static str,
+  pub sha256: String,
+  pub lines: usize,
+  /// The command, if the script would run.
+  pub command: Option<CommandSpec>,
+}
+
+impl ScriptStep {
+  pub fn wants_to_run(&self) -> bool {
+    self.command.is_some()
+  }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -70,7 +90,46 @@ impl Plan {
   }
 
   pub fn is_empty(&self) -> bool {
-    !self.has_changes() && self.dropped.is_empty()
+    !self.has_changes()
+      && self.dropped.is_empty()
+      && !self.scripts.iter().any(ScriptStep::wants_to_run)
+  }
+}
+
+/// Adds the profile's custom scripts to the plan. Scripts were already
+/// checked by validation (inside the profile folder, readable).
+pub fn add_scripts(
+  plan: &mut Plan,
+  profile_dir: &std::path::Path,
+  scripts: &[String],
+  previous: Option<&ProfileState>,
+) {
+  use sha2::{Digest, Sha256};
+
+  for path in scripts {
+    let full = profile_dir.join(path);
+    let contents = std::fs::read(&full).unwrap_or_default();
+    let sha256: String = Sha256::digest(&contents)
+      .iter()
+      .map(|b| format!("{b:02x}"))
+      .collect();
+    let status = match previous.and_then(|p| p.scripts.get(path)) {
+      None => "new",
+      Some(old) if *old != sha256 => "changed",
+      Some(_) => "unchanged",
+    };
+    let command = (status != "unchanged").then(|| {
+      CommandSpec::user("bash", [], &[full.display().to_string()])
+        .in_dir(&profile_dir.display().to_string())
+    });
+
+    plan.scripts.push(ScriptStep {
+      path: path.clone(),
+      status,
+      sha256,
+      lines: String::from_utf8_lossy(&contents).lines().count(),
+      command,
+    });
   }
 }
 
@@ -206,6 +265,7 @@ pub fn build(
     aur,
     setup,
     dropped,
+    scripts: Vec::new(),
     notes,
   }
 }

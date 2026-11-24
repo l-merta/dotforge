@@ -76,7 +76,11 @@ impl Runner for RealRunner {
       eprintln!("\n→ {command}");
     }
 
-    let child = Command::new(&argv[0])
+    let mut child = Command::new(&argv[0]);
+    if let Some(dir) = &command.cwd {
+      child.current_dir(dir);
+    }
+    let child = child
       .args(&argv[1..])
       .stdin(Stdio::inherit())
       .stdout(Stdio::piped())
