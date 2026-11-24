@@ -31,6 +31,10 @@ pub struct EntryState {
   /// or `dependency of hyprland`.
   pub wanted_by: Vec<String>,
   pub status: Status,
+  /// All official packages of this entry for this machine's family.
+  pub packages: Vec<String>,
+  /// All AUR packages of this entry for this machine's family.
+  pub aur: Vec<String>,
   /// Official packages that still need installing.
   pub missing_packages: Vec<String>,
   /// AUR packages that still need installing.
@@ -170,6 +174,8 @@ pub fn compare(
       category: entry.category,
       wanted_by,
       status: Status::Installed,
+      packages: Vec::new(),
+      aur: Vec::new(),
       missing_packages: Vec::new(),
       missing_aur: Vec::new(),
       setup: entry.setup.clone(),
@@ -195,6 +201,8 @@ pub fn compare(
           ));
         }
         Some(install) => {
+          state.packages = install.packages.clone();
+          state.aur = install.aur.clone();
           state.missing_packages = missing(&install.packages, |p| backend.is_installed(p));
           state.missing_aur = missing(&install.aur, |p| backend.is_installed(p));
 

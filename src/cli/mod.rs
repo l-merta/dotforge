@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 
+pub mod apply;
 pub mod catalog;
 pub mod config;
 pub mod profile;

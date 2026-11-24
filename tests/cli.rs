@@ -173,15 +173,6 @@ fn missing_profile_exits_with_not_found() {
 }
 
 #[test]
-fn unfinished_commands_say_so() {
-  let config = TempDir::new().unwrap();
-  let output = dotforge(config.path(), &["profile", "apply", "desk"]);
-
-  assert_eq!(output.status.code(), Some(5));
-  assert!(String::from_utf8_lossy(&output.stderr).contains("Milestone 5"));
-}
-
-#[test]
 fn bad_arguments_exit_with_usage() {
   let config = TempDir::new().unwrap();
   let output = dotforge(config.path(), &["catalog", "fly"]);
@@ -927,4 +918,345 @@ fn profile_status_warns_about_multilib_and_aur_helper() {
     messages.iter().any(|m| m.contains("neither paru nor yay")),
     "{messages:?}"
   );
+}
+
+// ---------- Milestone 5: profile apply ----------
+//
+// These tests never touch the real system. Fake `sudo`, `pacman`,
+// `systemctl` and `usermod` programs are put first on PATH. The fake
+// pacman "installs" a package by writing its entry into the fake pacman
+// database inside DOTFORGE_SYSTEM_ROOT, and the fake usermod edits the fake
+// /etc/passwd. Real installs are tested in CI inside an Arch container.
+
+struct ApplyEnv {
+  system: TempDir,
+  config: TempDir,
+  state: TempDir,
+  bin: TempDir,
+}
+
+const FAKE_SUDO: &str = "#!/bin/sh\nexec \"$@\"\n";
+
+const FAKE_PACMAN: &str = r#"#!/bin/sh
+echo "pacman $*" >> "$DOTFORGE_SYSTEM_ROOT/calls.log"
+mode="$1"; shift
+db="$DOTFORGE_SYSTEM_ROOT/var/lib/pacman/local"
+for arg in "$@"; do
+  case "$arg" in -*) continue ;; esac
+  if [ -n "$FAIL_PACKAGE" ] && [ "$arg" = "$FAIL_PACKAGE" ]; then
+    echo "error: target not found: $arg" >&2
+    exit 1
+  fi
+  case "$mode" in
+    -S) mkdir -p "$db/$arg-1.0-1" && printf '%%NAME%%\n%s\n\n' "$arg" > "$db/$arg-1.0-1/desc" ;;
+    -Rs) rm -rf "$db/$arg-1.0-1" ;;
+  esac
+done
+"#;
+
+const FAKE_SYSTEMCTL: &str = "#!/bin/sh\necho \"systemctl $*\" >> \"$DOTFORGE_SYSTEM_ROOT/calls.log\"\n[ \"$1\" = is-enabled ] && { echo disabled; exit 1; }\nexit 0\n";
+
+const FAKE_USERMOD: &str = r#"#!/bin/sh
+echo "usermod $*" >> "$DOTFORGE_SYSTEM_ROOT/calls.log"
+if [ "$1" = "--shell" ]; then
+  sed -i "s#^\($3:.*:\)[^:]*\$#\1$2#" "$DOTFORGE_SYSTEM_ROOT/etc/passwd"
+fi
+"#;
+
+impl ApplyEnv {
+  fn new(installed: &[&str]) -> Self {
+    use std::os::unix::fs::PermissionsExt;
+
+    let system = fake_system(ARCH, installed, Some(CONF));
+    let etc = system.path().join("etc");
+    fs::write(
+      etc.join("passwd"),
+      "tester:x:1000:1000::/home/tester:/bin/bash\n",
+    )
+    .unwrap();
+    fs::write(etc.join("group"), "wheel:x:998:tester\n").unwrap();
+    fs::write(etc.join("shells"), "/bin/bash\n/usr/bin/zsh\n").unwrap();
+
+    let bin = TempDir::new().unwrap();
+    for (name, script) in [
+      ("sudo", FAKE_SUDO),
+      ("pacman", FAKE_PACMAN),
+      ("systemctl", FAKE_SYSTEMCTL),
+      ("usermod", FAKE_USERMOD),
+    ] {
+      let path = bin.path().join(name);
+      fs::write(&path, script).unwrap();
+      fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+
+    ApplyEnv {
+      system,
+      config: TempDir::new().unwrap(),
+      state: TempDir::new().unwrap(),
+      bin,
+    }
+  }
+
+  fn profile(&self, utilities: &str) {
+    write_profile(
+      self.config.path(),
+      "box",
+      &format!(
+        "format_version: 1\nname: Box\ndevice:\n  type: desktop\n  os:\n    family: arch\n    distribution: arch\napplications:\n  utilities: [{utilities}]\n"
+      ),
+    );
+  }
+
+  fn run(&self, args: &[&str], stdin: &str) -> Output {
+    self.run_with(args, stdin, &[])
+  }
+
+  fn run_with(&self, args: &[&str], stdin: &str, env: &[(&str, &str)]) -> Output {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let path = format!(
+      "{}:{}",
+      self.bin.path().display(),
+      std::env::var("PATH").unwrap_or_default()
+    );
+    let mut command = Command::new(env!("CARGO_BIN_EXE_dotforge"));
+    command
+      .args(args)
+      .env("DOTFORGE_CONFIG_DIR", self.config.path())
+      .env("DOTFORGE_SYSTEM_ROOT", self.system.path())
+      .env("DOTFORGE_STATE_DIR", self.state.path())
+      .env("DOTFORGE_ALLOW_ROOT", "1")
+      .env("USER", "tester")
+      .env("PATH", path)
+      .current_dir(std::env::temp_dir())
+      .stdin(Stdio::piped())
+      .stdout(Stdio::piped())
+      .stderr(Stdio::piped());
+    for (key, value) in env {
+      command.env(key, value);
+    }
+
+    let mut child = command.spawn().unwrap();
+    child
+      .stdin
+      .take()
+      .unwrap()
+      .write_all(stdin.as_bytes())
+      .unwrap();
+    child.wait_with_output().unwrap()
+  }
+
+  fn installed(&self, package: &str) -> bool {
+    self
+      .system
+      .path()
+      .join(format!("var/lib/pacman/local/{package}-1.0-1"))
+      .exists()
+  }
+
+  fn calls(&self) -> String {
+    fs::read_to_string(self.system.path().join("calls.log")).unwrap_or_default()
+  }
+}
+
+#[test]
+fn apply_dry_run_shows_the_plan_and_changes_nothing() {
+  let env = ApplyEnv::new(&["git"]);
+  env.profile("git, htop");
+
+  let output = env.run(&["profile", "apply", "box", "--dry-run"], "");
+  let stdout = String::from_utf8_lossy(&output.stdout);
+
+  assert_eq!(output.status.code(), Some(0), "{stdout}");
+  assert!(stdout.contains("Already installed: git"), "{stdout}");
+  assert!(
+    stdout.contains("pacman -S --needed --noconfirm htop"),
+    "{stdout}"
+  );
+  assert!(stdout.contains("Dry run"), "{stdout}");
+  assert!(!env.installed("htop"));
+  assert_eq!(env.calls(), "");
+}
+
+#[test]
+fn apply_installs_packages_and_runs_setup_steps() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("htop, zsh");
+
+  let output = env.run(&["profile", "apply", "box", "--yes"], "");
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  let stderr = String::from_utf8_lossy(&output.stderr);
+
+  assert_eq!(output.status.code(), Some(0), "{stdout}\n{stderr}");
+  assert!(env.installed("htop") && env.installed("zsh"));
+  assert!(env.calls().contains("usermod --shell /usr/bin/zsh tester"));
+  let passwd = fs::read_to_string(env.system.path().join("etc/passwd")).unwrap();
+  assert!(passwd.contains(":/usr/bin/zsh"), "{passwd}");
+  assert!(stdout.contains("The profile was applied"), "{stdout}");
+
+  // A log file was written.
+  let logs: Vec<_> = fs::read_dir(env.state.path().join("logs"))
+    .unwrap()
+    .collect();
+  assert_eq!(logs.len(), 1);
+}
+
+#[test]
+fn apply_twice_has_nothing_to_do() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("htop, zsh");
+  assert_eq!(
+    env
+      .run(&["profile", "apply", "box", "--yes"], "")
+      .status
+      .code(),
+    Some(0)
+  );
+  let calls_before = env.calls();
+
+  let output = env.run(&["--json", "profile", "apply", "box", "--yes"], "");
+  assert_eq!(output.status.code(), Some(0));
+  assert_eq!(json(&output)["data"]["result"], "nothing_to_do");
+  // No package was installed and no setup command ran the second time.
+  assert_eq!(env.calls(), calls_before);
+}
+
+#[test]
+fn answering_no_cancels_without_changes() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("htop");
+
+  let output = env.run(&["profile", "apply", "box"], "n\n");
+  assert_eq!(output.status.code(), Some(7));
+  assert!(String::from_utf8_lossy(&output.stdout).contains("Cancelled"));
+  assert!(!env.installed("htop"));
+}
+
+#[test]
+fn answering_yes_applies() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("htop");
+
+  let output = env.run(&["profile", "apply", "box"], "y\n");
+  assert_eq!(output.status.code(), Some(0));
+  assert!(env.installed("htop"));
+}
+
+#[test]
+fn a_failed_install_exits_with_failure_and_skips_its_setup() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("zsh");
+
+  let output = env.run_with(
+    &["--json", "profile", "apply", "box", "--yes"],
+    "",
+    &[("FAIL_PACKAGE", "zsh")],
+  );
+  assert_eq!(output.status.code(), Some(1));
+
+  let report = &json(&output)["data"]["report"];
+  assert_eq!(report["success"], false);
+  assert!(report["counts"]["failed"].as_u64().unwrap() >= 1);
+  assert!(report["counts"]["skipped"].as_u64().unwrap() >= 1);
+  assert!(!env.calls().contains("usermod"));
+}
+
+#[test]
+fn dropped_entries_are_kept_with_yes_and_removed_when_asked() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("git, htop");
+  assert_eq!(
+    env
+      .run(&["profile", "apply", "box", "--yes"], "")
+      .status
+      .code(),
+    Some(0)
+  );
+
+  // htop is taken out of the profile.
+  env.profile("git");
+
+  // --yes never removes anything.
+  env.run(&["profile", "apply", "box", "--yes"], "");
+  assert!(env.installed("htop"));
+
+  // Asked again, the answer "r" removes it.
+  let output = env.run(&["profile", "apply", "box"], "r\n");
+  let stderr = String::from_utf8_lossy(&output.stderr);
+  assert_eq!(output.status.code(), Some(0), "{stderr}");
+  assert!(
+    stderr.contains("'htop' is no longer in the profile"),
+    "{stderr}"
+  );
+  assert!(!env.installed("htop"));
+  assert!(env.installed("git"));
+
+  // Now DotForge has forgotten it, so it doesn't ask again.
+  let output = env.run(&["--json", "profile", "apply", "box"], "");
+  assert_eq!(json(&output)["data"]["result"], "nothing_to_do");
+}
+
+#[test]
+fn dropped_entries_can_be_ignored() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("git, htop");
+  env.run(&["profile", "apply", "box", "--yes"], "");
+  env.profile("git");
+
+  env.run(&["profile", "apply", "box"], "i\n");
+  assert!(env.installed("htop"));
+
+  // Ignored: DotForge stopped tracking it and won't ask again.
+  let output = env.run(&["--json", "profile", "apply", "box"], "");
+  assert_eq!(json(&output)["data"]["result"], "nothing_to_do");
+}
+
+#[test]
+fn apply_refuses_an_invalid_profile() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("not-a-real-app");
+
+  let output = env.run(&["profile", "apply", "box", "--yes"], "");
+  assert_eq!(output.status.code(), Some(4));
+  assert!(String::from_utf8_lossy(&output.stderr).contains("profile validate"));
+}
+
+#[test]
+fn apply_refuses_an_unsupported_system() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("git");
+  fs::write(
+    env.system.path().join("etc/os-release"),
+    "NAME=\"Ubuntu\"\nID=ubuntu\n",
+  )
+  .unwrap();
+
+  let output = env.run(&["profile", "apply", "box", "--yes"], "");
+  assert_eq!(output.status.code(), Some(4));
+}
+
+#[test]
+fn apply_refuses_to_run_as_root() {
+  // The test container itself runs as root, so this only checks the
+  // refusal when we are root.
+  if unsafe_is_root() {
+    let env = ApplyEnv::new(&[]);
+    env.profile("git");
+    let output = env.run_with(
+      &["profile", "apply", "box", "--yes"],
+      "",
+      &[("DOTFORGE_ALLOW_ROOT", "0")],
+    );
+    assert_eq!(output.status.code(), Some(4));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("as root"));
+  }
+}
+
+fn unsafe_is_root() -> bool {
+  Command::new("id")
+    .arg("-u")
+    .output()
+    .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
+    .unwrap_or(false)
 }

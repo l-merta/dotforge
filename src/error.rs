@@ -71,6 +71,7 @@ pub enum AppError {
 
   /// The command is planned but does not exist yet.
   #[error("'{command}' is not implemented yet (planned for {milestone})")]
+  #[allow(dead_code)] // kept for commands planned in later milestones
   NotImplemented {
     command: &'static str,
     milestone: &'static str,

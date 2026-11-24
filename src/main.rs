@@ -2,6 +2,7 @@ use clap::Parser;
 
 use cli::{Cli, Commands};
 
+mod apply;
 mod catalog;
 mod cli;
 mod editor;
