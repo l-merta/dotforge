@@ -38,6 +38,25 @@ pub fn user_catalog_dir() -> Result<PathBuf, AppError> {
   Ok(config_dir()?.join("catalog"))
 }
 
+/// Where DotForge keeps what it remembers between runs (which entries it
+/// manages, and logs): `$DOTFORGE_STATE_DIR`, else
+/// `$XDG_STATE_HOME/dotforge`, else `~/.local/state/dotforge`.
+pub fn state_dir() -> Result<PathBuf, AppError> {
+  if let Some(dir) = non_empty_env("DOTFORGE_STATE_DIR") {
+    return Ok(PathBuf::from(dir));
+  }
+
+  if let Some(dir) = non_empty_env("XDG_STATE_HOME") {
+    return Ok(PathBuf::from(dir).join("dotforge"));
+  }
+
+  if let Some(home) = non_empty_env("HOME") {
+    return Ok(PathBuf::from(home).join(".local/state/dotforge"));
+  }
+
+  Err(AppError::NoConfigDir)
+}
+
 fn non_empty_env(name: &str) -> Option<String> {
   env::var(name).ok().filter(|value| !value.is_empty())
 }

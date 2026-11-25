@@ -258,6 +258,59 @@ fn check_id(
   }
 }
 
+/// Checks the profile's custom `scripts`: each must be a file inside the
+/// profile folder. `profile_dir` is the folder that holds `profile.yml`.
+pub fn validate_scripts(profile: &Profile, profile_dir: &std::path::Path) -> Vec<Issue> {
+  use std::path::{Component, Path};
+
+  let mut issues = Vec::new();
+  let mut seen = HashSet::new();
+
+  for (index, script) in profile.scripts.iter().enumerate() {
+    let location = format!("scripts[{index}]");
+    let path = Path::new(script);
+
+    if script.trim().is_empty() {
+      issues.push(Issue::error(location, "the script path is empty"));
+      continue;
+    }
+    if path.is_absolute() || script.starts_with('~') {
+      issues.push(Issue::error(
+        location,
+        format!("'{script}' must be relative to the profile folder, e.g. scripts/tweaks.sh"),
+      ));
+      continue;
+    }
+    if path.components().any(|c| c == Component::ParentDir) {
+      issues.push(Issue::error(
+        location,
+        format!("'{script}' points outside the profile folder; scripts must live inside it"),
+      ));
+      continue;
+    }
+    if !seen.insert(script.clone()) {
+      issues.push(Issue::warning(
+        location,
+        format!("'{script}' is listed twice"),
+      ));
+      continue;
+    }
+
+    let full = profile_dir.join(path);
+    if !full.is_file() {
+      issues.push(Issue::error(
+        location,
+        format!(
+          "the script '{script}' does not exist (expected {})",
+          full.display()
+        ),
+      ));
+    }
+  }
+
+  issues
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;

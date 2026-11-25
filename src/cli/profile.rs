@@ -65,10 +65,18 @@ pub enum ProfileCommands {
     profile: String,
   },
 
-  /// Apply a profile (not implemented yet)
+  /// Make this machine match a profile: shows a plan, asks, then installs
   Apply {
-    /// Profile name
-    name: String,
+    /// A profile name, or a path to a profile folder or profile.yml
+    profile: String,
+
+    /// Only show what would be done; change nothing
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Don't ask before applying (dropped items are still never removed)
+    #[arg(long, short = 'y')]
+    yes: bool,
   },
 }
 
@@ -99,10 +107,11 @@ pub fn handle(command: ProfileCommands) -> Result<Report, AppError> {
 
     ProfileCommands::Status { profile } => status(&profile),
 
-    ProfileCommands::Apply { .. } => Err(AppError::NotImplemented {
-      command: "profile apply",
-      milestone: "Milestone 5",
-    }),
+    ProfileCommands::Apply {
+      profile,
+      dry_run,
+      yes,
+    } => crate::cli::apply::apply(&profile, crate::cli::apply::Options { dry_run, yes }),
   }
 }
 
@@ -456,7 +465,10 @@ fn check(file: &std::path::Path) -> Result<ProfileValidation, AppError> {
   let profile = loader::load(file)?;
   let catalog = Catalog::load()?;
 
-  let issues = validate::validate(&profile, &catalog);
+  let mut issues = validate::validate(&profile, &catalog);
+  if let Some(dir) = file.parent() {
+    issues.extend(validate::validate_scripts(&profile, dir));
+  }
   let errors = count(&issues, Severity::Error);
 
   let result = ProfileValidation {

@@ -132,6 +132,7 @@ reported instead of being silently ignored.
 | `rice.compositor` | no | Catalog ID of category `compositor`. |
 | `rice.shell` | no | Catalog ID of category `shell`. |
 | `rice.components.taskbar`, `status`, `launcher`, `notifications` | no | Catalog ID of category `component` or `shell` (a desktop shell can provide these itself). |
+| `scripts` | no | List of your own scripts, relative to the profile folder, for example `[scripts/tweaks.sh]`. An escape hatch: see [Custom scripts](apply.md#custom-scripts). |
 
 ## What `validate` checks
 
@@ -147,6 +148,9 @@ reported instead of being silently ignored.
   [catalog-format.md](catalog-format.md#capabilities)).
 - **Warning:** a shell or component that only works on Wayland while the
   compositor (or desktop) only runs on X11, or the other way round.
+
+- Every script in `scripts` is a relative path inside the profile folder
+  (no `/...`, `~/...` or `..`) and the file exists.
 
 The `system` section is not checked against the catalog yet; that comes
 when drivers and audio stacks get catalog entries.

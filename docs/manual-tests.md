@@ -579,3 +579,235 @@ dotforge --json profile status ./profiles/test | grep -E '"satisfied"|"(installe
 You see `"satisfied": false` (unless you have everything installed!) and
 the `installed` and `missing` counts. Scripts read `data.to_install` for
 the exact package lists.
+
+## Milestone 5: applying a profile (installing for real)
+
+**These tests install and remove packages.** Run them in the `arch-test`
+virtual machine, not on your real computer. Before you start:
+
+1. In VMware, revert `arch-test` to the `clean-baseline` snapshot.
+2. Start it and log in as `arch`.
+3. Get this version of DotForge:
+
+```sh
+cd ~/dotforge
+git fetch && git checkout milestone-5-apply-engine && git pull
+cargo build --release
+```
+
+`dotforge` already points at `~/dotforge/target/release/dotforge`, so the
+new build is used right away. Don't set `DOTFORGE_CONFIG_DIR` here: in the
+VM we use the real `~/.config/dotforge`.
+
+Make a small profile to play with:
+
+```sh
+mkdir -p ~/.config/dotforge/profiles/vm
+cat > ~/.config/dotforge/profiles/vm/profile.yml <<'YAML'
+format_version: 1
+name: VM test
+device:
+  type: desktop
+  os:
+    family: arch
+    distribution: arch
+applications:
+  utilities: [htop, fastfetch, zsh]
+YAML
+```
+
+### 5.1 Dry run: see the plan, change nothing
+
+```sh
+dotforge profile apply vm --dry-run
+pacman -Q htop
+```
+
+You see `Install (3): htop fastfetch zsh` with the exact pacman command,
+a setup step `make /usr/bin/zsh your login shell`, and
+`Dry run: nothing was changed.` Then `pacman -Q htop` says
+`package 'htop' was not found`: nothing was installed.
+
+### 5.2 Saying no cancels
+
+```sh
+dotforge profile apply vm
+```
+
+Type `n` and press Enter. You see `Cancelled. Nothing was changed.`
+`echo $?` prints **7**.
+
+### 5.3 Apply for real
+
+```sh
+dotforge profile apply vm
+```
+
+Type `y`. You see pacman's own output scroll by, then a result like:
+
+```
+  [ok     ] install 3 package(s): htop, fastfetch, zsh
+  [ok     ] make /usr/bin/zsh your login shell (zsh)
+```
+
+and `The profile was applied.` Check it really happened:
+
+```sh
+htop --version
+getent passwd arch      # ends with /usr/bin/zsh
+```
+
+### 5.4 Running it again does nothing
+
+```sh
+dotforge profile apply vm
+```
+
+You see `This machine already matches the profile. Nothing to do.` and
+it doesn't ask anything.
+
+### 5.5 The log
+
+```sh
+ls ~/.local/state/dotforge/logs/
+less ~/.local/state/dotforge/logs/apply-*.log
+```
+
+There is one log per apply run that changed something, with every command
+and its full output.
+
+### 5.6 Removing something from the profile
+
+Take `htop` out of the profile:
+
+```sh
+sed -i 's/htop, //' ~/.config/dotforge/profiles/vm/profile.yml
+dotforge profile apply vm
+```
+
+The plan says `'htop' was removed from the profile but is still
+installed`, then DotForge asks what to do. Just press **Enter** (keep).
+htop stays installed (`pacman -Q htop` still finds it).
+
+Run it again and this time type **r**:
+
+```sh
+dotforge profile apply vm
+pacman -Q htop
+```
+
+You see `[ok     ] remove htop`, and `pacman -Q htop` now says it is not
+found. Run apply once more: `Nothing to do`, it doesn't ask again.
+
+### 5.7 `--yes` never removes anything
+
+```sh
+sed -i 's/utilities: \[/utilities: [htop, /' ~/.config/dotforge/profiles/vm/profile.yml
+dotforge profile apply vm --yes          # installs htop again, no question
+sed -i 's/htop, //' ~/.config/dotforge/profiles/vm/profile.yml
+dotforge profile apply vm --yes
+pacman -Q htop
+```
+
+The second apply doesn't ask anything and doesn't remove htop: `--yes`
+always picks "keep" for removed items.
+
+### 5.8 An AUR package
+
+paru is already in the VM. Add an AUR-only app (Visual Studio Code is
+`visual-studio-code-bin` in the AUR):
+
+```sh
+sed -i 's/utilities: \[/utilities: [htop, /; s/^applications:/applications:\n  development: [vscode]/' ~/.config/dotforge/profiles/vm/profile.yml
+cat ~/.config/dotforge/profiles/vm/profile.yml
+dotforge profile apply vm
+```
+
+The plan shows a separate `Install from the AUR` part that runs
+`paru -S --needed --noconfirm visual-studio-code-bin` **without** sudo.
+Type `y`. paru builds and installs it (this takes a minute).
+
+### 5.9 Refused as root
+
+```sh
+sudo dotforge profile apply vm
+echo $?
+```
+
+You see `don't run 'dotforge profile apply' as root or with sudo`, and
+the exit code is **4**.
+
+### 5.10 A failing step
+
+Put a package that doesn't exist into a copy of the catalog entry for htop:
+
+```sh
+mkdir -p ~/.config/dotforge/catalog/applications
+cat > ~/.config/dotforge/catalog/applications/htop.yml <<'YAML'
+id: htop
+name: htop
+description: Broken on purpose
+category: application
+platforms: [linux]
+installation:
+  arch:
+    packages: [htop-does-not-exist]
+YAML
+dotforge profile apply vm --yes
+echo $?
+rm ~/.config/dotforge/catalog/applications/htop.yml
+```
+
+pacman fails (`target not found`), the result shows `[FAILED ]` with the
+last lines of pacman's error and the log path, and the exit code is **1**.
+(Your own catalog entry replaces the built-in one, which is how this
+test breaks it.)
+
+### 5.11 Your own script
+
+Add a script to the profile:
+
+```sh
+mkdir -p ~/.config/dotforge/profiles/vm/scripts
+cat > ~/.config/dotforge/profiles/vm/scripts/hello.sh <<'SH'
+#!/bin/bash
+echo "hello from $(whoami) in $(pwd)" > ~/hello.txt
+SH
+echo 'scripts: [scripts/hello.sh]' >> ~/.config/dotforge/profiles/vm/profile.yml
+dotforge profile apply vm --dry-run
+```
+
+The plan has a part `Your own scripts` with
+`scripts/hello.sh: new, 2 line(s): you'll be asked before it runs`, and
+`~/hello.txt` does not exist yet.
+
+Now try `--yes`:
+
+```sh
+dotforge profile apply vm --yes
+```
+
+It still asks `Run your script scripts/hello.sh ...? [y/N]`, because
+`--yes` never answers for scripts. Press Enter (no): the result shows it
+as `[skipped]`. Run it again and type `y`:
+
+```sh
+dotforge profile apply vm
+cat ~/hello.txt
+```
+
+You see `hello from arch in /home/arch/.config/dotforge/profiles/vm`.
+Run apply once more: `Nothing to do`, the script doesn't run again. Edit
+the script (change the text), and apply shows it as `changed` and asks
+again.
+
+Last, a script outside the profile folder is refused:
+
+```sh
+sed -i 's#scripts/hello.sh#../hello.sh#' ~/.config/dotforge/profiles/vm/profile.yml
+dotforge profile validate vm
+```
+
+You see an error that `'../hello.sh' points outside the profile folder`.
+
+When you're done, revert the VM to `clean-baseline` again.

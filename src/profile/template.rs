@@ -111,6 +111,10 @@ device:
 #   shell: noctalia
 #   components:
 #     notifications: noctalia
+
+# Your own scripts, for things the catalog can't do yet. Paths are relative
+# to this folder. apply always shows them and asks before each one runs.
+# scripts: []
 "#,
     name = new.name,
     version = CURRENT_FORMAT_VERSION,
@@ -164,6 +168,8 @@ mod tests {
               && !line.contains("Every value")
               && !line.contains("DotForge profile")
               && !line.contains("Check it")
+              && !line.contains("Your own scripts")
+              && !line.contains("to this folder")
           })
           .unwrap_or(line)
       })

@@ -28,6 +28,8 @@ pub enum ExitCode {
   NotImplemented,
   /// Something with that name already exists (for example a profile).
   AlreadyExists,
+  /// You answered "no" when DotForge asked for confirmation.
+  Cancelled,
 }
 
 impl ExitCode {
@@ -40,6 +42,7 @@ impl ExitCode {
       ExitCode::Invalid => 4,
       ExitCode::NotImplemented => 5,
       ExitCode::AlreadyExists => 6,
+      ExitCode::Cancelled => 7,
     }
   }
 }
@@ -57,5 +60,6 @@ mod tests {
     assert_eq!(ExitCode::Invalid.code(), 4);
     assert_eq!(ExitCode::NotImplemented.code(), 5);
     assert_eq!(ExitCode::AlreadyExists.code(), 6);
+    assert_eq!(ExitCode::Cancelled.code(), 7);
   }
 }

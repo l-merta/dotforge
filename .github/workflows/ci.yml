@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Format, lint and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+
+  arch-apply:
+    name: Real install test (Arch container)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm --needed base-devel rust git sudo
+      - uses: actions/checkout@v4
+      - name: Build DotForge
+        run: cargo build --release
+      - name: Run the apply test as a normal user
+        run: bash ci/arch-apply-test.sh

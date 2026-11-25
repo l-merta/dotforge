@@ -52,6 +52,7 @@ In text mode, results go to stdout and errors to stderr.
 | 4 | A profile or catalog file is invalid, or validation found errors. |
 | 5 | The command is not implemented yet. |
 | 6 | Something with that name already exists (for example `profile create` for an existing profile). |
+| 7 | You answered "no" when DotForge asked for confirmation (for example in `profile apply`). |
 
 These numbers will not change. New codes may be added later.
 
@@ -62,12 +63,14 @@ These numbers will not change. New codes may be added later.
 | Your profiles | `~/.config/dotforge/profiles/<name>/profile.yml` |
 | Your catalog entries | `~/.config/dotforge/catalog/` |
 | DotForge settings | `~/.config/dotforge/config.yml` |
+| What `apply` did, and its logs | `~/.local/state/dotforge/` |
 
 If `$XDG_CONFIG_HOME` is set, `~/.config` is replaced by it. Setting
 `$DOTFORGE_CONFIG_DIR` points DotForge at a completely different folder
 (the tests use this). `$DOTFORGE_SYSTEM_ROOT` does the same for the system
 files DotForge reads, such as `/etc/os-release` (see
-[system-and-status.md](system-and-status.md)).
+[system-and-status.md](system-and-status.md)), and `$DOTFORGE_STATE_DIR`
+for the state folder (see [apply.md](apply.md)).
 
 ## Settings
 
