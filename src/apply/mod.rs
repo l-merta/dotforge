@@ -10,6 +10,7 @@
 pub mod checks;
 pub mod command;
 pub mod engine;
+pub mod links;
 pub mod log;
 pub mod plan;
 pub mod prompt;

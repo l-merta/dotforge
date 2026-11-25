@@ -933,6 +933,7 @@ struct ApplyEnv {
   config: TempDir,
   state: TempDir,
   bin: TempDir,
+  home: TempDir,
 }
 
 const FAKE_SUDO: &str = "#!/bin/sh\nexec \"$@\"\n";
@@ -994,6 +995,7 @@ impl ApplyEnv {
       config: TempDir::new().unwrap(),
       state: TempDir::new().unwrap(),
       bin,
+      home: TempDir::new().unwrap(),
     }
   }
 
@@ -1028,6 +1030,7 @@ impl ApplyEnv {
       .env("DOTFORGE_STATE_DIR", self.state.path())
       .env("DOTFORGE_ALLOW_ROOT", "1")
       .env("USER", "tester")
+      .env("HOME", self.home.path())
       .env("PATH", path)
       .current_dir(std::env::temp_dir())
       .stdin(Stdio::piped())
@@ -1401,4 +1404,167 @@ fn scripts_outside_the_profile_folder_are_refused() {
 
 fn output_text(output: &Output) -> String {
   String::from_utf8_lossy(&output.stdout).to_string()
+}
+
+// ---------- Milestone 6: config files and assets ----------
+
+impl ApplyEnv {
+  /// A profile with kitty (installed already) and these extra files in
+  /// its folder: each `(path, contents)`.
+  fn profile_with_files(&self, files: &[(&str, &str)]) -> std::path::PathBuf {
+    let dir = self.config.path().join("profiles/box");
+    let _ = fs::remove_dir_all(dir.join("config"));
+    let _ = fs::remove_dir_all(dir.join("assets"));
+    write_profile(
+      self.config.path(),
+      "box",
+      "format_version: 1\nname: Box\ndevice:\n  type: desktop\n  os:\n    family: arch\n    distribution: arch\napplications:\n  terminal: kitty\n",
+    );
+    for (path, contents) in files {
+      let file = dir.join(path);
+      fs::create_dir_all(file.parent().unwrap()).unwrap();
+      fs::write(file, contents).unwrap();
+    }
+    fs::canonicalize(dir).unwrap()
+  }
+
+  fn link_of(&self, path: &str) -> Option<std::path::PathBuf> {
+    fs::read_link(self.home.path().join(path)).ok()
+  }
+}
+
+#[test]
+fn configs_and_assets_are_linked_from_the_profile() {
+  let env = ApplyEnv::new(&["kitty"]);
+  let dir = env.profile_with_files(&[
+    ("config/kitty/kitty.conf", "font_size 12"),
+    ("config/home/.zshrc", "# my zshrc"),
+    ("assets/wallpapers/sea.jpg", "jpg"),
+  ]);
+
+  let output = env.run(&["profile", "apply", "box", "--dry-run"], "");
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(stdout.contains("Config files and assets"), "{stdout}");
+  assert!(
+    stdout.contains("kitty: ~/.config/kitty -> config/kitty: link"),
+    "{stdout}"
+  );
+  assert!(
+    stdout.contains("- ~/.zshrc -> config/home/.zshrc: link"),
+    "{stdout}"
+  );
+  assert!(
+    env.link_of(".config/kitty").is_none(),
+    "dry run must not link"
+  );
+
+  let output = env.run(&["profile", "apply", "box", "--yes"], "");
+  assert_eq!(
+    output.status.code(),
+    Some(0),
+    "{}",
+    String::from_utf8_lossy(&output.stdout)
+  );
+  assert_eq!(env.link_of(".config/kitty"), Some(dir.join("config/kitty")));
+  assert_eq!(env.link_of(".zshrc"), Some(dir.join("config/home/.zshrc")));
+  assert_eq!(
+    env.link_of(".local/share/dotforge/wallpapers"),
+    Some(dir.join("assets/wallpapers"))
+  );
+  // Editing through the link edits the profile's file.
+  assert_eq!(
+    fs::read_to_string(env.home.path().join(".config/kitty/kitty.conf")).unwrap(),
+    "font_size 12"
+  );
+
+  let output = env.run(&["--json", "profile", "apply", "box", "--yes"], "");
+  assert_eq!(json(&output)["data"]["result"], "nothing_to_do");
+}
+
+#[test]
+fn existing_files_are_backed_up_before_linking() {
+  let env = ApplyEnv::new(&["kitty"]);
+  fs::create_dir_all(env.home.path().join(".config/kitty")).unwrap();
+  fs::write(
+    env.home.path().join(".config/kitty/kitty.conf"),
+    "old config",
+  )
+  .unwrap();
+  env.profile_with_files(&[("config/kitty/kitty.conf", "new config")]);
+
+  let output = env.run(&["profile", "apply", "box", "--dry-run"], "");
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert!(
+    stdout.contains("a folder is there now and will be moved to"),
+    "{stdout}"
+  );
+
+  let output = env.run(&["--json", "profile", "apply", "box", "--yes"], "");
+  assert_eq!(output.status.code(), Some(0));
+  let step = &json(&output)["data"]["report"]["steps"][0];
+  assert_eq!(step["kind"], "link");
+  assert!(step["detail"].as_str().unwrap().contains("moved it to"));
+
+  // The old config is safe in the backups folder.
+  let backups = env.state.path().join("backups");
+  let stamp = fs::read_dir(&backups)
+    .unwrap()
+    .next()
+    .unwrap()
+    .unwrap()
+    .path();
+  assert_eq!(
+    fs::read_to_string(stamp.join(".config/kitty/kitty.conf")).unwrap(),
+    "old config"
+  );
+  assert_eq!(
+    fs::read_to_string(env.home.path().join(".config/kitty/kitty.conf")).unwrap(),
+    "new config"
+  );
+}
+
+#[test]
+fn links_removed_from_the_profile_are_removed() {
+  let env = ApplyEnv::new(&["kitty"]);
+  env.profile_with_files(&[
+    ("config/home/.zshrc", "x"),
+    ("config/kitty/kitty.conf", "y"),
+  ]);
+  env.run(&["profile", "apply", "box", "--yes"], "");
+  assert!(env.link_of(".zshrc").is_some());
+
+  env.profile_with_files(&[("config/kitty/kitty.conf", "y")]);
+  let output = env.run(&["profile", "apply", "box", "--dry-run"], "");
+  assert!(String::from_utf8_lossy(&output.stdout).contains("~/.zshrc: no longer in the profile"));
+
+  env.run(&["profile", "apply", "box", "--yes"], "");
+  assert!(env.link_of(".zshrc").is_none());
+  assert!(env.link_of(".config/kitty").is_some());
+
+  let output = env.run(&["--json", "profile", "apply", "box", "--yes"], "");
+  assert_eq!(json(&output)["data"]["result"], "nothing_to_do");
+}
+
+#[test]
+fn config_for_an_unknown_entry_is_an_error() {
+  let env = ApplyEnv::new(&["kitty"]);
+  env.profile_with_files(&[
+    ("config/kity/kitty.conf", "x"),
+    ("config/waybar/config", "y"),
+  ]);
+
+  let output = env.run(&["profile", "validate", "box"], "");
+  let stdout = String::from_utf8_lossy(&output.stdout);
+  assert_eq!(output.status.code(), Some(4), "{stdout}");
+  assert!(
+    stdout.contains("no catalog entry 'kity'") && stdout.contains("'kitty'"),
+    "{stdout}"
+  );
+  assert!(
+    stdout.contains("'waybar' is not in the profile"),
+    "{stdout}"
+  );
+
+  let output = env.run(&["profile", "apply", "box", "--yes"], "");
+  assert_eq!(output.status.code(), Some(4));
 }

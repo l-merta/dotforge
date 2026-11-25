@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Serialize;
 
 use super::checks::{self, ActionState, Context};
+use super::links;
 use super::log::Runner;
 use super::plan::Plan;
 use super::prompt::DroppedChoice;
@@ -21,7 +22,8 @@ pub enum StepStatus {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct StepResult {
-  /// `install`, `aur`, `setup`, `remove`, `ignore`, `keep` or `script`.
+  /// `install`, `aur`, `setup`, `link`, `unlink`, `remove`, `ignore`,
+  /// `keep` or `script`.
   pub kind: &'static str,
   pub description: String,
   pub command: Option<String>,
@@ -145,6 +147,78 @@ pub fn execute(
 
     steps.push(result);
   }
+
+  // 3b. Config files and assets: links into your home folder.
+  let mut made = BTreeMap::new();
+  for step in &plan.links {
+    if !step.needs_change() {
+      made.insert(step.link.target.clone(), step.link.source.clone());
+      continue;
+    }
+    let description = format!("link {}", step.link.label);
+    let detail_ok = match &step.state {
+      links::TargetState::Replace { found, backup } => {
+        Some(format!("{found} was there; moved it to {backup}"))
+      }
+      _ => None,
+    };
+    runner.note(&format!(
+      "link {} -> {}",
+      step.link.target.display(),
+      step.link.source.display()
+    ));
+    let result = links::make(step);
+    if let Err(error) = &result {
+      runner.note(&format!("! {error}"));
+    } else {
+      made.insert(step.link.target.clone(), step.link.source.clone());
+      if step.link.label == "fonts" {
+        notes.insert("new fonts: run 'fc-cache -f' if an app doesn't see them yet".into());
+      }
+    }
+    steps.push(StepResult {
+      kind: "link",
+      description,
+      command: None,
+      status: if result.is_ok() {
+        StepStatus::Ok
+      } else {
+        StepStatus::Failed
+      },
+      detail: result.err().or(detail_ok),
+    });
+  }
+  let mut unlinked = Vec::new();
+  for step in &plan.unlinks {
+    let result = links::unmake(step);
+    if result.is_ok() {
+      unlinked.push(step.target.clone());
+    }
+    steps.push(StepResult {
+      kind: "unlink",
+      description: format!(
+        "remove the link {} (no longer in the profile)",
+        step.target.display()
+      ),
+      command: None,
+      status: if result.is_ok() {
+        StepStatus::Ok
+      } else {
+        StepStatus::Failed
+      },
+      detail: result.err(),
+    });
+  }
+  links::remember(state, &made, &unlinked);
+  // Links DotForge no longer sees (removed from the profile and already
+  // gone, or replaced by you) are forgotten.
+  state.links.retain(|target, _| {
+    made.contains_key(std::path::Path::new(target))
+      || plan
+        .unlinks
+        .iter()
+        .any(|u| u.target == std::path::Path::new(target) && !unlinked.contains(&u.target))
+  });
 
   // 4. Entries dropped from the profile: only what you chose.
   let mut forget: Vec<String> = Vec::new();

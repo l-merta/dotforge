@@ -32,6 +32,9 @@ pub struct ProfileState {
   /// that ran. A script runs again only when its contents change.
   #[serde(default)]
   pub scripts: BTreeMap<String, String>,
+  /// Links DotForge made: destination -> file or folder in the profile.
+  #[serde(default)]
+  pub links: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

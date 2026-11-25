@@ -149,6 +149,9 @@ reported instead of being silently ignored.
 - **Warning:** a shell or component that only works on Wayland while the
   compositor (or desktop) only runs on X11, or the other way round.
 
+- The `config/` and `assets/` folders: folder names in `config/` are
+  catalog IDs of entries in the profile, and no two things want the same
+  place. See [config-and-assets.md](config-and-assets.md).
 - Every script in `scripts` is a relative path inside the profile folder
   (no `/...`, `~/...` or `..`) and the file exists.
 
