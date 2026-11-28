@@ -131,7 +131,7 @@ reported instead of being silently ignored.
 | `rice.desktop` | no | Catalog ID of category `desktop`. |
 | `rice.compositor` | no | Catalog ID of category `compositor`. |
 | `rice.shell` | no | Catalog ID of category `shell`. |
-| `rice.components.taskbar`, `status`, `launcher`, `notifications` | no | Catalog ID of category `component` or `shell` (a desktop shell can provide these itself). |
+| `rice.components.taskbar`, `status`, `launcher`, `notifications`, `display_manager` (login screen), `lockscreen` | no | Catalog ID of category `component` or `shell` (a desktop shell can provide these itself). |
 | `scripts` | no | List of your own scripts, relative to the profile folder, for example `[scripts/tweaks.sh]`. An escape hatch: see [Custom scripts](apply.md#custom-scripts). |
 
 ## What `validate` checks

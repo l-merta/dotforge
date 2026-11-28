@@ -966,3 +966,119 @@ You see `sea.jpg`. Your configs (for example a wallpaper setting in
 Hyprland) can always point at `~/.local/share/dotforge/wallpapers/`.
 
 When you're done, revert the VM to `clean-baseline` again.
+
+## Milestone 7: the complete workflow on a clean VM
+
+This is the "dress rehearsal": everything a new user does, on a fresh
+machine, ending with logging in to the desktop DotForge set up. Revert
+`arch-test` to `clean-baseline`, log in as `arch`, then:
+
+```sh
+cd ~/dotforge
+git fetch && git checkout milestone-7-arch-workflow-tests && git pull
+cargo build --release
+```
+
+**VMware tip:** turn on *Accelerate 3D graphics* in the VM's display
+settings before step 7.5, or Hyprland may only show a black screen.
+
+### 7.1 Create and fill in a profile
+
+```sh
+dotforge profile create desk
+dotforge profile edit desk
+```
+
+nano opens the new profile. Replace the commented examples with:
+
+```yaml
+applications:
+  terminal: kitty
+  utilities: [htop, fastfetch]
+  development: [docker]
+
+rice:
+  compositor: hyprland
+  components:
+    taskbar: waybar
+    launcher: wofi
+    display_manager: sddm
+    lockscreen: hyprlock
+```
+
+Save with Ctrl+O, Enter, Ctrl+X.
+
+```sh
+dotforge profile validate desk
+```
+
+`The profile is valid.` (A warning or two is fine.)
+
+### 7.2 What is missing
+
+```sh
+dotforge profile status desk
+```
+
+Most lines are `[need]`. `git` (installed in the VM already) would be
+`[ok  ]` if you add it to the profile.
+
+### 7.3 The plan
+
+```sh
+dotforge profile apply desk --dry-run
+```
+
+You see one pacman command with all packages, and setup steps like
+`enable the system service docker.service`, `add you to the 'docker'
+group` and `enable the system service sddm.service`. Nothing was installed yet.
+
+### 7.4 Interrupt it on purpose
+
+```sh
+dotforge profile apply desk
+```
+
+Type `y`, and while pacman is downloading, press **Ctrl+C**. DotForge
+stops. Now run the same command again:
+
+- if pacman was stopped cleanly, the plan shows what is still missing,
+  and applying finishes the job;
+- if it says `pacman is busy`, the lock file was left behind. No pacman
+  is running, so remove it as the message says
+  (`sudo rm /var/lib/pacman/db.lck`) and run apply again.
+
+Either way it ends with `The profile was applied.`
+
+### 7.5 Log in to your new desktop
+
+```sh
+systemctl is-enabled sddm docker
+id -nG
+sudo reboot
+```
+
+`is-enabled` prints `enabled` twice and `id -nG` includes `docker`. After
+the reboot you get the SDDM login screen. Log in as `arch` with the
+**Hyprland** session: you get a Hyprland desktop. Press Super+Q for a
+kitty terminal (the default Hyprland config's shortcut) and run `waybar &`
+to see the bar.
+
+### 7.6 Nothing to do
+
+Back in a terminal:
+
+```sh
+dotforge profile status desk
+dotforge profile apply desk
+```
+
+Everything is `[ok  ]`, and apply says `Nothing to do`.
+
+### 7.7 Report back
+
+Tell me which steps worked and anything that looked wrong or confusing,
+for example a message you had to read twice. That's what Milestone 8
+(polish before the release) will fix.
+
+When you're done, revert the VM to `clean-baseline` again.

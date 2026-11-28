@@ -53,4 +53,5 @@ see them with `dotforge config show` and change them with `dotforge config edit`
 - [System detection and profile status](docs/system-and-status.md)
 - [Applying a profile](docs/apply.md)
 - [Config files and assets](docs/config-and-assets.md)
+- [Supported systems and known limitations](docs/supported-systems.md)
 - [Hand tests: try each feature yourself](docs/manual-tests.md)

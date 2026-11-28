@@ -1639,3 +1639,32 @@ fn a_failed_run_can_simply_be_run_again() {
   assert!(env.installed("htop") && env.installed("zsh"));
   assert!(env.calls().contains("usermod --shell"));
 }
+
+#[test]
+fn login_screen_and_lock_screen_slots() {
+  let config = TempDir::new().unwrap();
+  write_profile(
+    config.path(),
+    "desk",
+    &PROFILE.replace(
+      "compositor: hyprland\n",
+      "compositor: hyprland\n  components:\n    display_manager: sddm\n    lockscreen: hyprlock\n",
+    ),
+  );
+  let output = dotforge(config.path(), &["--json", "profile", "validate", "desk"]);
+  let data = &json(&output)["data"];
+  assert_eq!(data["valid"], true, "{data}");
+  assert_eq!(data["warnings"], 0, "{data}");
+
+  // The wrong kind of thing in a slot is a warning.
+  write_profile(
+    config.path(),
+    "desk",
+    &PROFILE.replace(
+      "compositor: hyprland\n",
+      "compositor: hyprland\n  components:\n    display_manager: hyprlock\n",
+    ),
+  );
+  let output = dotforge(config.path(), &["--json", "profile", "validate", "desk"]);
+  assert_eq!(json(&output)["data"]["warnings"], 1);
+}

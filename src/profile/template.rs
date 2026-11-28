@@ -111,6 +111,8 @@ device:
 #   shell: noctalia
 #   components:
 #     notifications: noctalia
+#     display_manager: sddm
+#     lockscreen: hyprlock
 
 # Your own scripts, for things the catalog can't do yet. Paths are relative
 # to this folder. apply always shows them and asks before each one runs.
