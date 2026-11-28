@@ -468,6 +468,7 @@ fn check(file: &std::path::Path) -> Result<ProfileValidation, AppError> {
   let mut issues = validate::validate(&profile, &catalog);
   if let Some(dir) = file.parent() {
     issues.extend(validate::validate_scripts(&profile, dir));
+    issues.extend(crate::apply::links::check(&profile, dir, &catalog));
   }
   let errors = count(&issues, Severity::Error);
 

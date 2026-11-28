@@ -173,7 +173,7 @@ impl Runner for RealRunner {
 }
 
 /// `20261124-024159`, in UTC.
-fn file_stamp() -> String {
+pub fn file_stamp() -> String {
   let (y, mo, d, h, mi, s) = utc_now();
   format!("{y:04}{mo:02}{d:02}-{h:02}{mi:02}{s:02}")
 }

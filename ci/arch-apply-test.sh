@@ -68,7 +68,19 @@ as_tester dotforge profile apply ci --yes < /dev/null   # --yes doesn't approve 
 echo y | as_tester dotforge profile apply ci
 grep -q "hello from tester" /home/tester/script-ran
 
-step "7. Running as root is refused"
+step "7. Config files are linked, and what was there is backed up"
+P=/home/tester/.config/dotforge/profiles/ci
+as_tester mkdir -p $P/config/fastfetch $P/config/home /home/tester/.config/fastfetch
+echo '{"modules": ["os"]}' | as_tester tee $P/config/fastfetch/config.jsonc > /dev/null
+echo 'alias ll="ls -l"' | as_tester tee $P/config/home/.zshrc > /dev/null
+echo 'old' | as_tester tee /home/tester/.config/fastfetch/config.jsonc > /dev/null
+as_tester dotforge profile apply ci --yes < /dev/null
+[ "$(readlink /home/tester/.config/fastfetch)" = "$P/config/fastfetch" ]
+[ "$(readlink /home/tester/.zshrc)" = "$P/config/home/.zshrc" ]
+grep -rq old /home/tester/.local/state/dotforge/backups/
+as_tester dotforge profile apply ci --yes < /dev/null | grep -q "Nothing to do"
+
+step "8. Running as root is refused"
 set +e
 dotforge profile apply ci --yes
 code=$?

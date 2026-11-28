@@ -811,3 +811,158 @@ dotforge profile validate vm
 You see an error that `'../hello.sh' points outside the profile folder`.
 
 When you're done, revert the VM to `clean-baseline` again.
+
+## Milestone 6: config files and assets
+
+These tests change files in your home folder, so run them in the
+`arch-test` VM too. Revert it to `clean-baseline`, log in as `arch`, then:
+
+```sh
+cd ~/dotforge
+git fetch && git checkout milestone-6-config-and-assets && git pull
+cargo build --release
+```
+
+Make a profile with fastfetch (a small program that prints system info)
+and install it:
+
+```sh
+mkdir -p ~/.config/dotforge/profiles/vm
+cat > ~/.config/dotforge/profiles/vm/profile.yml <<'YAML'
+format_version: 1
+name: VM test
+device:
+  type: virtual-machine
+  os:
+    family: arch
+    distribution: arch
+applications:
+  utilities: [fastfetch]
+YAML
+dotforge profile apply vm --yes
+```
+
+Short names used below:
+
+```sh
+P=~/.config/dotforge/profiles/vm
+```
+
+### 6.1 Link a config folder
+
+Give fastfetch a tiny config in the profile:
+
+```sh
+mkdir -p $P/config/fastfetch
+echo '{ "modules": ["title", "os", "kernel"] }' > $P/config/fastfetch/config.jsonc
+dotforge profile apply vm --dry-run
+```
+
+The plan has a part `Config files and assets` with
+`fastfetch: ~/.config/fastfetch -> config/fastfetch: link`. Nothing is
+linked yet (`ls -l ~/.config/fastfetch` says no such file).
+
+```sh
+dotforge profile apply vm --yes
+ls -l ~/.config/fastfetch
+fastfetch
+```
+
+`ls -l` shows `~/.config/fastfetch -> /home/arch/.config/dotforge/profiles/vm/config/fastfetch`,
+and fastfetch now prints only three lines: your user, the OS and the
+kernel.
+
+### 6.2 Editing through the link edits the profile
+
+```sh
+echo '{ "modules": ["title", "os", "kernel", "memory"] }' > ~/.config/fastfetch/config.jsonc
+cat $P/config/fastfetch/config.jsonc
+```
+
+The profile's file changed too (it shows `memory`), because they are the
+same file.
+
+### 6.3 Your existing files are backed up, not overwritten
+
+The VM already has a `~/.bashrc`. Put your own in the profile:
+
+```sh
+mkdir -p $P/config/home
+cp ~/.bashrc $P/config/home/.bashrc
+echo 'alias hi="echo hello from DotForge"' >> $P/config/home/.bashrc
+dotforge profile apply vm
+```
+
+The plan says `~/.bashrc -> config/home/.bashrc: link; a file is there now
+and will be moved to ~/.local/state/dotforge/backups/<date-time>/.bashrc`.
+Type `y`. The result says `a file was there; moved it to ...`. Check:
+
+```sh
+ls ~/.local/state/dotforge/backups/*/
+source ~/.bashrc && hi
+```
+
+The backup folder has your old `.bashrc`, and `hi` prints
+`hello from DotForge`.
+
+### 6.4 Applying again does nothing
+
+```sh
+dotforge profile apply vm
+```
+
+`This machine already matches the profile. Nothing to do.`
+
+### 6.5 Removing something from the profile removes its link
+
+```sh
+mv $P/config/fastfetch /tmp/fastfetch-config
+dotforge profile apply vm --dry-run
+```
+
+The plan says `~/.config/fastfetch: no longer in the profile; the link
+will be removed`. Apply it with `--yes`, then `ls -l ~/.config/fastfetch`
+says no such file: only the link was removed. Your file is safe in
+`/tmp/fastfetch-config`. Put it back with
+`mv /tmp/fastfetch-config $P/config/fastfetch` and apply again to re-link.
+
+### 6.6 Mistakes in config/ are caught
+
+```sh
+mkdir -p $P/config/fastfech $P/config/kitty
+dotforge profile validate vm
+echo $?
+```
+
+You see an error `config/fastfech: there is no catalog entry 'fastfech';
+did you mean 'fastfetch'?` and a warning `config/kitty: 'kitty' is not in
+the profile, so this config is not linked`. The exit code is **4**, and
+`dotforge profile apply vm` refuses to run. Clean up with
+`rmdir $P/config/fastfech $P/config/kitty`.
+
+### 6.7 Two things can't own the same place
+
+```sh
+mkdir -p $P/config/home/.config/fastfetch
+echo '{}' > $P/config/home/.config/fastfetch/extra.jsonc
+dotforge profile validate vm
+rm -r $P/config/home/.config
+```
+
+You see an error that `'fastfetch' and '~/.config/fastfetch/extra.jsonc'
+both want ...`, because `config/fastfetch/` already owns all of
+`~/.config/fastfetch`.
+
+### 6.8 A wallpaper
+
+```sh
+mkdir -p $P/assets/wallpapers
+echo "pretend this is a picture" > $P/assets/wallpapers/sea.jpg
+dotforge profile apply vm --yes
+ls ~/.local/share/dotforge/wallpapers/
+```
+
+You see `sea.jpg`. Your configs (for example a wallpaper setting in
+Hyprland) can always point at `~/.local/share/dotforge/wallpapers/`.
+
+When you're done, revert the VM to `clean-baseline` again.

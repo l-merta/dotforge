@@ -7,8 +7,8 @@ your machine match the profile.
 
 > **Work in progress.** DotForge is an early prototype. It can create, list and
 > check profiles, browse a catalog of about 40 desktop components and apps,
-> compare a profile with your machine, and install what is missing. It
-> doesn't link your config files yet. Arch Linux is the first supported
+> compare a profile with your machine, install what is missing, and link
+> your config files and assets from the profile folder. Arch Linux is the first supported
 > system. Try `apply` in a virtual machine first.
 
 ## Build and install from source
@@ -52,4 +52,5 @@ see them with `dotforge config show` and change them with `dotforge config edit`
 - [Command line conventions: `--json`, exit codes, file locations](docs/cli.md)
 - [System detection and profile status](docs/system-and-status.md)
 - [Applying a profile](docs/apply.md)
+- [Config files and assets](docs/config-and-assets.md)
 - [Hand tests: try each feature yourself](docs/manual-tests.md)

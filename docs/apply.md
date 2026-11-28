@@ -30,6 +30,7 @@ stops with exit code 4 before doing anything.
 | `add_user_to_group` | `sudo usermod -aG <group> <you>` |
 | `set_default_shell` | `sudo usermod --shell <shell> <you>` |
 | Removing a dropped item | `sudo pacman -Rs --noconfirm <packages>` |
+| Config files and assets | symlinks from your home folder into the profile folder, made by DotForge itself (see [config-and-assets.md](config-and-assets.md)) |
 
 `--noconfirm` is safe here because DotForge has already asked you. All the
 packages go into **one** pacman command, so pacman resolves them together.
@@ -144,6 +145,7 @@ is invalid or the system isn't supported, 7 cancelled.
 |---|---|
 | What DotForge applied | `~/.local/state/dotforge/state.json` |
 | Logs | `~/.local/state/dotforge/logs/` |
+| Files moved out of the way of a link | `~/.local/state/dotforge/backups/` |
 
 `$XDG_STATE_HOME` replaces `~/.local/state` when it is set, and
 `$DOTFORGE_STATE_DIR` points at a different folder entirely (the tests use

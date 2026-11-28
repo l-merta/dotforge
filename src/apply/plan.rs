@@ -7,6 +7,7 @@ use serde::Serialize;
 
 use super::checks::{self, ActionState, Context};
 use super::command::CommandSpec;
+use super::links::{LinkStep, UnlinkStep};
 use super::state::ProfileState;
 use crate::catalog::model::SetupAction;
 use crate::system::compare::{Comparison, Status};
@@ -17,6 +18,9 @@ use crate::validation::Issue;
 pub struct Plan {
   pub profile: String,
   pub file: String,
+  /// Your home folder, for showing paths as `~/...`.
+  #[serde(skip)]
+  pub home: String,
   pub host: String,
   /// Entries that are already fully installed.
   pub already_installed: Vec<String>,
@@ -28,6 +32,10 @@ pub struct Plan {
   pub dropped: Vec<DroppedEntry>,
   /// The profile's own scripts, in profile order.
   pub scripts: Vec<ScriptStep>,
+  /// Config files and assets linked from the profile folder.
+  pub links: Vec<LinkStep>,
+  /// Links DotForge made earlier that the profile no longer has.
+  pub unlinks: Vec<UnlinkStep>,
   pub notes: Vec<Issue>,
 }
 
@@ -86,7 +94,11 @@ impl Plan {
   /// Steps that change the system (not counting dropped entries, which are
   /// only changed if you say so).
   pub fn has_changes(&self) -> bool {
-    self.install.is_some() || self.aur.is_some() || self.setup.iter().any(|s| s.command.is_some())
+    self.install.is_some()
+      || self.aur.is_some()
+      || self.setup.iter().any(|s| s.command.is_some())
+      || self.links.iter().any(LinkStep::needs_change)
+      || !self.unlinks.is_empty()
   }
 
   pub fn is_empty(&self) -> bool {
@@ -259,6 +271,7 @@ pub fn build(
   Plan {
     profile: comparison.profile.clone(),
     file: comparison.file.clone(),
+    home: String::new(),
     host: comparison.host.clone(),
     already_installed,
     install,
@@ -266,6 +279,8 @@ pub fn build(
     setup,
     dropped,
     scripts: Vec::new(),
+    links: Vec::new(),
+    unlinks: Vec::new(),
     notes,
   }
 }

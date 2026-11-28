@@ -57,6 +57,13 @@ pub fn state_dir() -> Result<PathBuf, AppError> {
   Err(AppError::NoConfigDir)
 }
 
+/// Your home folder (`$HOME`). Config files and assets are linked into it.
+pub fn home_dir() -> Result<PathBuf, AppError> {
+  non_empty_env("HOME")
+    .map(PathBuf::from)
+    .ok_or(AppError::NoConfigDir)
+}
+
 fn non_empty_env(name: &str) -> Option<String> {
   env::var(name).ok().filter(|value| !value.is_empty())
 }

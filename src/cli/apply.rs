@@ -6,7 +6,8 @@ use serde::Serialize;
 
 use crate::apply::checks::{self, ActionState, Context};
 use crate::apply::engine::{self, ApplyReport, StepStatus};
-use crate::apply::log::RealRunner;
+use crate::apply::links::{self, TargetState};
+use crate::apply::log::{self, RealRunner};
 use crate::apply::plan::{self, Plan};
 use crate::apply::prompt::{Prompter, StdinPrompter, YesPrompter};
 use crate::apply::state;
@@ -47,6 +48,14 @@ pub fn apply(name_or_path: &str, options: Options) -> Result<Report, AppError> {
     .unwrap_or_default();
   let mut issues = validate::validate(&profile, &catalog);
   issues.extend(validate::validate_scripts(&profile, &profile_dir));
+  let home = paths::home_dir()?;
+  let (wanted_links, link_issues) = links::collect(
+    &profile_dir,
+    &links::profile_ids(&profile, &catalog),
+    &catalog,
+    &home,
+  );
+  issues.extend(link_issues);
   let errors = count(&issues, Severity::Error);
   if errors > 0 {
     return Err(AppError::Invalid {
@@ -88,6 +97,9 @@ pub fn apply(name_or_path: &str, options: Options) -> Result<Report, AppError> {
   let previous = saved.profiles.get(&file_key);
   let mut plan = plan::build(&comparison, &host, &ctx, previous);
   plan::add_scripts(&mut plan, &profile_dir, &profile.scripts, previous);
+  let backup_dir = state_dir.join("backups").join(log::file_stamp());
+  (plan.links, plan.unlinks) = links::plan(wanted_links, &home, &backup_dir, previous);
+  plan.home = home.display().to_string();
 
   if options.dry_run {
     return Ok(Report::new(&Outcome {
@@ -261,6 +273,41 @@ impl Render for Plan {
             Some(command) => format!("\n    remove runs: {command}"),
             None => "\n    (its packages are still needed by the profile, so nothing would be uninstalled)".into(),
           }
+        ));
+      }
+    }
+
+    if !self.links.is_empty() || !self.unlinks.is_empty() {
+      let home = std::path::Path::new(&self.home);
+      text.push_str("\n  Config files and assets (linked from the profile folder):\n");
+      for step in &self.links {
+        let what = match &step.state {
+          TargetState::Linked => "already linked".to_string(),
+          TargetState::Create => "link".to_string(),
+          TargetState::Replace { found, backup } => format!(
+            "link; {found} is there now and will be moved to {}",
+            links::tilde(std::path::Path::new(backup), home)
+          ),
+        };
+        let target = links::tilde(&step.link.target, home);
+        let source = step
+          .link
+          .source
+          .strip_prefix(std::path::Path::new(&self.file).parent().unwrap_or(home))
+          .unwrap_or(&step.link.source)
+          .display()
+          .to_string();
+        let name = if step.link.label == target {
+          String::new()
+        } else {
+          format!("{}: ", step.link.label)
+        };
+        text.push_str(&format!("    - {name}{target} -> {source}: {what}\n"));
+      }
+      for step in &self.unlinks {
+        text.push_str(&format!(
+          "    - {}: no longer in the profile; the link will be removed\n",
+          links::tilde(&step.target, home)
         ));
       }
     }
