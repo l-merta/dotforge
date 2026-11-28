@@ -36,7 +36,7 @@ The command could not run:
 ```
 
 `error.kind` is one of `not_found`, `already_exists`, `io`, `parse`,
-`invalid`, `editor`, `no_config_dir`, `not_implemented`. Parse errors also include `file`,
+`invalid`, `editor`, `busy` (pacman is locked), `no_config_dir`, `not_implemented`. Parse errors also include `file`,
 `field`, `line`, `column` and `reason`.
 
 In text mode, results go to stdout and errors to stderr.

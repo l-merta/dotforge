@@ -61,6 +61,13 @@ pub enum AppError {
     hint: Option<String>,
   },
 
+  /// Something else is using the system right now (or was interrupted).
+  #[error("{message}")]
+  Busy {
+    message: String,
+    hint: Option<String>,
+  },
+
   /// The editor could not be started or reported a failure.
   #[error("could not open the editor '{editor}': {reason}")]
   Editor { editor: String, reason: String },
@@ -108,6 +115,7 @@ impl AppError {
       AppError::Io { .. }
       | AppError::Write { .. }
       | AppError::Editor { .. }
+      | AppError::Busy { .. }
       | AppError::NoConfigDir => ExitCode::Failure,
       AppError::AlreadyExists { .. } => ExitCode::AlreadyExists,
       AppError::Parse { .. } | AppError::Invalid { .. } => ExitCode::Invalid,
@@ -125,6 +133,7 @@ impl AppError {
       AppError::Invalid { .. } => "invalid",
       AppError::NoConfigDir => "no_config_dir",
       AppError::Editor { .. } => "editor",
+      AppError::Busy { .. } => "busy",
       AppError::NotImplemented { .. } => "not_implemented",
     }
   }
@@ -137,6 +146,7 @@ impl AppError {
       ),
       AppError::NotFound { hint, .. }
       | AppError::Invalid { hint, .. }
+      | AppError::Busy { hint, .. }
       | AppError::AlreadyExists { hint, .. } => hint.as_deref(),
       _ => None,
     }

@@ -1568,3 +1568,74 @@ fn config_for_an_unknown_entry_is_an_error() {
   let output = env.run(&["profile", "apply", "box", "--yes"], "");
   assert_eq!(output.status.code(), Some(4));
 }
+
+// ---------- Milestone 7: robustness ----------
+
+#[test]
+fn a_locked_pacman_is_explained_instead_of_failing_halfway() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("htop");
+  fs::write(env.system.path().join("var/lib/pacman/db.lck"), "").unwrap();
+
+  // A dry run still works and warns.
+  let output = env.run(&["profile", "apply", "box", "--dry-run"], "");
+  assert_eq!(output.status.code(), Some(0));
+  assert!(String::from_utf8_lossy(&output.stdout).contains("pacman is busy"));
+
+  // A real run stops before changing anything.
+  let output = env.run(&["--json", "profile", "apply", "box", "--yes"], "");
+  assert_eq!(output.status.code(), Some(1));
+  let error = &json(&output)["error"];
+  assert_eq!(error["kind"], "busy");
+  assert!(
+    error["hint"]
+      .as_str()
+      .unwrap()
+      .contains("sudo rm /var/lib/pacman/db.lck")
+  );
+  assert_eq!(env.calls(), "");
+
+  // Once the lock is gone, apply works.
+  fs::remove_file(env.system.path().join("var/lib/pacman/db.lck")).unwrap();
+  assert_eq!(
+    env
+      .run(&["profile", "apply", "box", "--yes"], "")
+      .status
+      .code(),
+    Some(0)
+  );
+  assert!(env.installed("htop"));
+}
+
+#[test]
+fn a_partly_installed_machine_only_gets_what_is_missing() {
+  let env = ApplyEnv::new(&["git"]);
+  env.profile("git, htop");
+
+  env.run(&["profile", "apply", "box", "--yes"], "");
+  let calls = env.calls();
+  assert!(
+    calls.contains("pacman -S --needed --noconfirm htop"),
+    "{calls}"
+  );
+  assert!(!calls.contains("git"), "{calls}");
+}
+
+#[test]
+fn a_failed_run_can_simply_be_run_again() {
+  let env = ApplyEnv::new(&[]);
+  env.profile("htop, zsh");
+
+  let output = env.run_with(
+    &["profile", "apply", "box", "--yes"],
+    "",
+    &[("FAIL_PACKAGE", "zsh")],
+  );
+  assert_eq!(output.status.code(), Some(1));
+
+  // The problem is fixed (here: the fake pacman stops failing).
+  let output = env.run(&["--json", "profile", "apply", "box", "--yes"], "");
+  assert_eq!(output.status.code(), Some(0));
+  assert!(env.installed("htop") && env.installed("zsh"));
+  assert!(env.calls().contains("usermod --shell"));
+}
