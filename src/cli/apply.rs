@@ -101,6 +101,27 @@ pub fn apply(name_or_path: &str, options: Options) -> Result<Report, AppError> {
   (plan.links, plan.unlinks) = links::plan(wanted_links, &home, &backup_dir, previous);
   plan.home = home.display().to_string();
 
+  // pacman can't run while another pacman holds its lock. A lock left
+  // behind by an interrupted pacman looks the same, so explain both.
+  let needs_pacman = plan.install.is_some()
+    || plan.aur.is_some()
+    || plan.dropped.iter().any(|d| d.remove_command.is_some());
+  let lock = host.root.join("var/lib/pacman/db.lck");
+  if needs_pacman && lock.exists() {
+    let message = format!("pacman is busy: its lock file {} exists", lock.display());
+    let hint = "another install or update may still be running; wait for it to finish. If none is running, an earlier one was interrupted: remove the lock with 'sudo rm /var/lib/pacman/db.lck' and try again".to_string();
+    if !options.dry_run {
+      return Err(AppError::Busy {
+        message,
+        hint: Some(hint),
+      });
+    }
+    plan.notes.push(crate::validation::Issue::warning(
+      "pacman",
+      format!("{message}; {hint}"),
+    ));
+  }
+
   if options.dry_run {
     return Ok(Report::new(&Outcome {
       result: "dry_run",

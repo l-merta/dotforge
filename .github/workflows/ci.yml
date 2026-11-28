@@ -31,3 +31,16 @@ jobs:
         run: cargo build --release
       - name: Run the apply test as a normal user
         run: bash ci/arch-apply-test.sh
+
+  arch-workflow:
+    name: Full workflow test (Arch container)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install build tools
+        run: pacman -Syu --noconfirm --needed base-devel rust git sudo
+      - uses: actions/checkout@v4
+      - name: Build DotForge
+        run: cargo build --release
+      - name: Run the complete workflow as a new user would
+        run: bash ci/arch-workflow-test.sh

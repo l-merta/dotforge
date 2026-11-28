@@ -133,6 +133,16 @@ fn check_capabilities(profile: &Profile, catalog: &Catalog, issues: &mut Vec<Iss
       &components.notifications,
       Capability::Notifications,
     ),
+    (
+      "rice.components.display_manager",
+      &components.display_manager,
+      Capability::DisplayManager,
+    ),
+    (
+      "rice.components.lockscreen",
+      &components.lockscreen,
+      Capability::Lockscreen,
+    ),
   ];
 
   for (location, id, capability) in slots {

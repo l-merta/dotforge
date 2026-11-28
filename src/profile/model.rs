@@ -183,15 +183,22 @@ pub struct Components {
   pub launcher: Option<String>,
   #[serde(default)]
   pub notifications: Option<String>,
+  /// The login screen, e.g. sddm or gdm.
+  #[serde(default)]
+  pub display_manager: Option<String>,
+  #[serde(default)]
+  pub lockscreen: Option<String>,
 }
 
 impl Components {
-  pub fn all(&self) -> [(&'static str, &Option<String>); 4] {
+  pub fn all(&self) -> [(&'static str, &Option<String>); 6] {
     [
       ("taskbar", &self.taskbar),
       ("status", &self.status),
       ("launcher", &self.launcher),
       ("notifications", &self.notifications),
+      ("display_manager", &self.display_manager),
+      ("lockscreen", &self.lockscreen),
     ]
   }
 }

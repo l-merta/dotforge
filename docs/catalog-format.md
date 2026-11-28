@@ -129,6 +129,8 @@ Profiles use them to check that an entry fits its slot:
 | `rice.components.taskbar`, `status` | `panel` |
 | `rice.components.launcher` | `launcher` |
 | `rice.components.notifications` | `notifications` |
+| `rice.components.display_manager` | `display-manager` |
+| `rice.components.lockscreen` | `lockscreen` |
 
 A mismatch is a warning in `profile validate`, not an error.
 
