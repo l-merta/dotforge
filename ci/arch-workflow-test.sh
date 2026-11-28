@@ -79,7 +79,11 @@ step "5. Apply"
 as_tester dotforge profile apply desk --yes
 pacman -Q kitty htop hyprland waybar docker xdg-desktop-portal-hyprland yay-bin
 id -nG tester | grep -qw docker
-# No systemd in a container: enabling docker.service is skipped, not failed.
+# No running systemd in a container: docker.service is enabled (it would
+# start on the next boot) but not started.
+[ -e /etc/systemd/system/multi-user.target.wants/docker.service ]
+# Empty folders from 'profile create' are not linked.
+[ ! -e /home/tester/.local/share/fonts/dotforge ]
 
 step "6. Status after, and applying again"
 as_tester dotforge --json profile status desk > /tmp/after.json

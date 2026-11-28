@@ -18,8 +18,9 @@ You also need:
   for the steps that change the system.
 - `paru` or `yay` if your profile has AUR packages. DotForge doesn't
   install an AUR helper for you.
-- systemd, for `enable_service` setup steps. Without it (for example in a
-  container) those steps are skipped, with a note.
+- systemd, for `enable_service` setup steps. When systemd isn't running
+  (for example in a container), the service is still enabled, so it
+  starts on the next boot, but it isn't started right away.
 
 ## How it is tested
 
@@ -27,7 +28,7 @@ You also need:
 |---|---|---|
 | Unit and end-to-end tests | Every command, using fake `pacman`, `sudo`, `systemctl` and `usermod` programs and a fake home folder, so nothing real is changed. | Every pull request. |
 | A clean `archlinux:latest` container on GitHub Actions | A real install: dry run, apply, apply again, removing an item, a custom script, config links and backups, and refusing to run as root (`ci/arch-apply-test.sh`). | Every pull request. |
-| A second clean container | The complete workflow a new user goes through: create a profile, add your own catalog entry, check status, dry run, apply a Hyprland desktop with apps, Docker and an AUR package (through a real `paru`), status afterwards, apply again. Then the ways it can go wrong: an invalid profile, a package that doesn't exist and a fixed re-run, and a busy pacman (`ci/arch-workflow-test.sh`). | Every pull request. |
+| A second clean container | The complete workflow a new user goes through: create a profile, add your own catalog entry, check status, dry run, apply a Hyprland desktop with apps, Docker (a service and a group) and an AUR package (through a real `paru`), status afterwards, apply again. Then the ways it can go wrong: an invalid profile, a package that doesn't exist and a fixed re-run, and a busy pacman (`ci/arch-workflow-test.sh`). | Every pull request. |
 | A clean Arch virtual machine | The hand tests in [manual-tests.md](manual-tests.md), including a full desktop with systemd services and logging in to the result. | Before each release. |
 
 ## Known limitations

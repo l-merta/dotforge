@@ -65,6 +65,12 @@ pub fn collect(
       continue;
     }
 
+    // An empty folder (like the ones `profile create` makes) has nothing
+    // to link. Linking it would hide your real config behind an empty one.
+    if is_empty_dir(&path) {
+      continue;
+    }
+
     if name == "home" {
       for file in files_under(&path) {
         let relative = file.strip_prefix(&path).unwrap_or(&file).to_path_buf();
@@ -126,6 +132,9 @@ pub fn collect(
       ));
       continue;
     }
+    if is_empty_dir(&path) {
+      continue;
+    }
     let share = home.join(".local/share");
     match name.as_str() {
       "wallpapers" => links.push(asset(
@@ -137,6 +146,9 @@ pub fn collect(
       "icons" | "cursors" => {
         for (theme, theme_path) in children(&path) {
           if theme_path.is_dir() {
+            if is_empty_dir(&theme_path) {
+              continue;
+            }
             links.push(asset(
               &format!("{name}/{theme}"),
               &theme_path,
@@ -382,6 +394,10 @@ fn children(dir: &Path) -> Vec<(String, PathBuf)> {
   items
 }
 
+fn is_empty_dir(dir: &Path) -> bool {
+  fs::read_dir(dir).is_ok_and(|mut entries| entries.next().is_none())
+}
+
 /// Every file (and symlink) below `dir`, sorted.
 fn files_under(dir: &Path) -> Vec<PathBuf> {
   let mut files: Vec<PathBuf> = walkdir::WalkDir::new(dir)
@@ -430,6 +446,7 @@ mod tests {
       "assets/icons/Papirus",
     ] {
       fs::create_dir_all(p.join(folder)).unwrap();
+      fs::write(p.join(folder).join("some.file"), "").unwrap();
     }
     fs::write(p.join("config/hyprland/hyprland.conf"), "").unwrap();
     fs::write(p.join("config/home/.zshrc"), "").unwrap();
@@ -447,6 +464,10 @@ mod tests {
       pairs,
       [
         ("~/.config/git/config".into(), "~/.config/git/config".into()),
+        (
+          "~/.config/git/some.file".into(),
+          "~/.config/git/some.file".into()
+        ),
         ("~/.zshrc".into(), "~/.zshrc".into()),
         ("hyprland".into(), "~/.config/hypr".into()),
         (
@@ -462,6 +483,23 @@ mod tests {
   }
 
   #[test]
+  fn empty_folders_are_not_linked() {
+    let dir = tempfile::tempdir().unwrap();
+    let p = dir.path();
+    for folder in [
+      "config/kitty",
+      "config/home",
+      "assets/fonts",
+      "assets/icons/Empty",
+    ] {
+      fs::create_dir_all(p.join(folder)).unwrap();
+    }
+    let (links, issues) = collect(p, &ids(&["kitty"]), &catalog(), Path::new("/home/me"));
+    assert!(links.is_empty(), "{links:?}");
+    assert!(issues.is_empty(), "{issues:?}");
+  }
+
+  #[test]
   fn reports_unknown_unused_and_conflicting_configs() {
     let dir = tempfile::tempdir().unwrap();
     let p = dir.path();
@@ -473,6 +511,7 @@ mod tests {
       "config/home/.config/hypr",
     ] {
       fs::create_dir_all(p.join(folder)).unwrap();
+      fs::write(p.join(folder).join("some.file"), "").unwrap();
     }
     fs::write(p.join("config/home/.config/hypr/extra.conf"), "").unwrap();
 

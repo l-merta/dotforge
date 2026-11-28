@@ -25,6 +25,10 @@ profiles/desktop/
     └── cursors/Bibata/    ->  ~/.local/share/icons/Bibata
 ```
 
+Empty folders are skipped. `profile create` makes empty `assets/`
+folders for you to fill, and nothing is linked until you put something in
+them.
+
 ### `config/<catalog id>/`
 
 A folder named after a catalog entry holds that entry's config. The
